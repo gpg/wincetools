@@ -91,7 +91,8 @@ main (int argc, char* argv[])
   MEMORY_BASIC_INFORMATION mbi;
   SYSTEM_INFO si;
   void *addr;
-  
+  int skipping = 0;
+
   memset (&si, '\0', sizeof (si));
   GetSystemInfo (&si);
   dump_mbi_header ();
@@ -106,7 +107,9 @@ main (int argc, char* argv[])
       res = VirtualQuery (addr, &mbi, sizeof (mbi));
       if (res == 0)
 	{
-          printf ("Skipping over %p\n", addr);
+	  if (!skipping)
+	    printf ("Skipping over %p...\n", addr);
+	  skipping = 1;
 	  new_addr = addr + si.dwPageSize;
  	  if (new_addr < addr)
 	    break;
@@ -118,6 +121,7 @@ main (int argc, char* argv[])
 	  printf ("Unexpected return size: %i (expected %i)\n",
 		  res, sizeof (mbi));
 	}
+      skipping = 0;
       dump_mbi (&mbi);
       /* Check for overflow.  */
       new_addr = addr + mbi.RegionSize;
