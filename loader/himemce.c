@@ -67,7 +67,7 @@ main (int argc, char *argv[])
   app_name = get_app_name ();
   cmdline = GetCommandLine ();
 
-  DBG ("starting %S %S\n", app_name, cmdline);
+  TRACE ("starting %S %S\n", app_name, cmdline);
 
   /* Note that this does not spawn a new process, but just calls into
      the startup function of the app eventually, and returns with its
