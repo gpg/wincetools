@@ -1,0 +1,109 @@
+HiMemCE
+=======
+
+HiMemCE is a high memory loader for Windows CE.  It softens the 32 MB
+process limit by allowing the EXE to load in the large file area
+reserved for file mappings.  This way, the EXE can be as large as free
+unfragmented virtual memory in that region, or free physical memory
+(whatever is smaller).  By linking libraries statically to the
+program, problems with too large or too many DLLs can be avoided.
+
+The usage of the loader is very simple.
+
+1. First, the program to be loaded has to be linked with the option
+/FIXED:NO (in MSVS, this setting can be found under Properties,
+Configuration Properties, Linker, Advanced, Fixed Base Address, choose
+"Generate a relocation section").  Here is a CMake example:
+
+SET_TARGET_PROPERTIES(foo PROPERTIES LINK_FLAGS " /FIXED:NO")
+
+2. Install the program "foo" under foo-real.exe, and copy the loader's
+himemce.exe side-by-side to it as foo.exe.  Then the loader (as
+foo.exe) transparently proxies all start ups of the foo program.  It
+will automatically look for foo-real.exe and load that into high
+memory, continueing execution there.
+
+Contained in this package is a himemce-real.exe, that serves as an
+example/test program.  In the special case of "himemce.exe", verbose
+output is on by default.
+
+How it works
+------------
+
+HiMemCE allocates a virtual memory region with VirtulAlloc
+(MEM_RESERVE, PAGE_NOACCESS) large enough to cover the whole image
+(SizeOfImage).  If that is larger than 2 MB, Windows CE automatically
+uses the large memory area for the allocation.  Then HiMemCE loads the
+sections into the designated place.  This immediately commits all
+pages[1].
+
+The image is then relocated (this is why /FIXED:NO is required).
+Although an attempt is made to honor the preferred base address, once
+all pages are copied, there is no big advantage to avoiding
+relocating, so setting a preferred base address (without a way to also
+use MapViewOfFile) is currently not recommended.
+
+The next step is to resolve imports.  For this, the import section is
+processed, and for each DLL listed there, we use LoadLibrary to pass
+off the load request to the system loader.  We don't do any DLL
+loading ourselves[1].  For every DLL loaded this way, we resolve
+references by GetProcAddress, which supports lookup by name as well as
+by ordinal.
+
+Finally, pass execution to the loaded program.  Because the entry
+point is a normal C function, we can reuse the current thread and all
+its state.  The first argument is the module handle of the started
+image.  As we constructed this ourselve, there is no valid module
+handle for it, so we reuse the module handle of the loader as well.[3]
+Because this affects argv[0], we give the loader the same name as the
+executable we want to load (and rename the loaded executable to
+foo-real.exe).
+
+
+Footnotes
+
+[1] This is a pessimization, but because only MapViewOfFile and
+not MapVieOfFileEx is available, mapping in the read only sections of
+the file directly is difficult, and when relocating the image, many
+pages end up being dirty anyway.  See Optimization options.
+
+[2] This avoids the complexity of sharing DLLs across applications as
+well as walking the dependency chain.  A more complex loader, that can
+also load DLLs and thus effectively extend the slot 61 and 60 by
+further slots is feasible, but quite a bit of work.  The only benefit
+over static linking this has is code sharing, but if we are only
+talking about a couple of MB, then code duplication across a small
+number of programs is not a big problem.  And the number of processes
+in Windows CE is necessarily small!
+
+[3] Note that this could confuse some programs that do deep
+introspection and want to manually load custom sections or do other
+magic.
+
+
+TODO
+----
+
+* Switch off verbose output for non-himemce.exe named copies of
+the loader (but allow a switch --himemce-log to switch it back on).
+
+* Show load errors in a diagnostic window for the user.
+
+
+Optimization options
+--------------------
+
+* Physical memory pressure can be relieved by trying to use
+  MapViewOfFile opportunistically (create relocated image, save to
+  temporary file, map it).
+
+
+ Copyright 2010 g10 Code GmbH
+
+ This file is free software; as a special exception the author gives
+ unlimited permission to copy and/or distribute it, with or without
+ modifications, as long as this notice is preserved.
+
+ This file is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
+ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
