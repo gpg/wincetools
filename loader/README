@@ -84,8 +84,6 @@ magic.
 TODO
 ----
 
-* Allow misaligned sections in map_image.
-
 * Switch off verbose output for non-himemce.exe named copies of
 the loader (but allow a switch --himemce-log to switch it back on).
 

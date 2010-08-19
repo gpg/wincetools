@@ -249,14 +249,12 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
 	  goto error;
 	}
     
-#if 0
     /* check for non page-aligned binary */
 
     if (nt->OptionalHeader.SectionAlignment <= page_mask)
       {
         /* unaligned sections, this happens for native subsystem binaries */
         /* in that case Windows simply maps in the whole file */
-#endif
 
         if (map_file_into_view( view, hfile, 0, total_size, 0, VPROT_COMMITTED | VPROT_READ,
                                 !dup_mapping ) != STATUS_SUCCESS) goto error;
@@ -272,9 +270,14 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
         /* set the image protections */
         VIRTUAL_SetProt( view, ptr, total_size,
                          VPROT_COMMITTED | VPROT_READ | VPROT_WRITECOPY | VPROT_EXEC );
+#endif
 
+#if 0
         /* no relocations are performed on non page-aligned binaries */
         goto done;
+#else
+	goto reloc;
+#endif
       }
 
 
@@ -299,23 +302,23 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
         end = sec->VirtualAddress + ROUND_SIZE( sec->VirtualAddress, map_size );
         if (sec->VirtualAddress > total_size || end > total_size || end < sec->VirtualAddress)
 	  {
-            WARN_(module)( "Section %.8s too large (%x+%lx/%lx)\n",
-                           sec->Name, sec->VirtualAddress, map_size, total_size );
+            ERR ( "Section %.8s too large (%x+%lx/%lx)\n",
+		  sec->Name, sec->VirtualAddress, map_size, total_size );
             goto error;
 	  }
 
         if ((sec->Characteristics & IMAGE_SCN_MEM_SHARED) &&
             (sec->Characteristics & IMAGE_SCN_MEM_WRITE))
 	  {
-            TRACE_(module)( "mapping shared section %.8s at %p off %x (%x) size %lx (%lx) flags %x\n",
-                            sec->Name, ptr + sec->VirtualAddress,
-                            sec->PointerToRawData, (int)pos, file_size, map_size,
-                            sec->Characteristics );
+            TRACE( "mapping shared section %.8s at %p off %x (%x) size %lx (%lx) flags %x\n",
+		   sec->Name, ptr + sec->VirtualAddress,
+		   sec->PointerToRawData, (int)pos, file_size, map_size,
+		   sec->Characteristics );
             if (map_file_into_view( view, shared_fd, sec->VirtualAddress, map_size, pos,
                                     VPROT_COMMITTED | VPROT_READ | VPROT_WRITE,
                                     FALSE ) != STATUS_SUCCESS)
 	      {
-                ERR_(module)( "Could not map shared section %.8s\n", sec->Name );
+                ERR ( "Could not map shared section %.8s\n", sec->Name );
                 goto error;
 	      }
 
@@ -336,11 +339,11 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
             continue;
 	  }
 
-        TRACE_(module)( "mapping section %.8s at %p off %x size %x virt %x flags %x\n",
-                        sec->Name, ptr + sec->VirtualAddress,
-                        sec->PointerToRawData, sec->SizeOfRawData,
-                        sec->Misc.VirtualSize, sec->Characteristics );
-
+        ERR( "mapping section %.8s at %p off %x size %x virt %x flags %x\n",
+	     sec->Name, ptr + sec->VirtualAddress,
+	     sec->PointerToRawData, sec->SizeOfRawData,
+	     sec->Misc.VirtualSize, sec->Characteristics );
+	
         if (!sec->PointerToRawData || !file_size) continue;
 
         /* Note: if the section is not aligned properly map_file_into_view will magically
@@ -354,7 +357,7 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
                                 VPROT_COMMITTED | VPROT_READ | VPROT_WRITECOPY,
                                 !dup_mapping ) != STATUS_SUCCESS)
 	  {
-            ERR_(module)( "Could not map section %.8s, file probably truncated\n", sec->Name );
+            ERR( "Could not map section %.8s, file probably truncated\n", sec->Name );
             goto error;
 	  }
 
@@ -362,15 +365,14 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
 	  {
             end = ROUND_SIZE( 0, file_size );
             if (end > map_size) end = map_size;
-            TRACE_(module)("clearing %p - %p\n",
-                           ptr + sec->VirtualAddress + file_size,
-                           ptr + sec->VirtualAddress + end );
+            TRACE("clearing %p - %p\n",
+		  ptr + sec->VirtualAddress + file_size,
+		  ptr + sec->VirtualAddress + end );
             memset( ptr + sec->VirtualAddress + file_size, 0, end - file_size );
 	  }
       }
-#endif
 
-
+ reloc:
     /* perform base relocation, if necessary */
 
     if (ptr != base)
