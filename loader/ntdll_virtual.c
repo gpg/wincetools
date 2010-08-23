@@ -180,7 +180,7 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
     IMAGE_DATA_DIRECTORY *imports;
     NTSTATUS status = STATUS_CONFLICTING_ADDRESSES;
     int i;
-    //    off_t pos;
+    off_t pos;
     DWORD fsize;
     struct file_view *view = NULL;
     char *ptr, *header_end;
@@ -314,7 +314,7 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
 		   sec->Name, ptr + sec->VirtualAddress,
 		   sec->PointerToRawData, (int)pos, file_size, map_size,
 		   sec->Characteristics );
-            if (map_file_into_view( view, shared_fd, sec->VirtualAddress, map_size, pos,
+            if (map_file_into_view( view, hfile, sec->VirtualAddress, map_size, pos,
                                     VPROT_COMMITTED | VPROT_READ | VPROT_WRITE,
                                     FALSE ) != STATUS_SUCCESS)
 	      {
@@ -330,7 +330,7 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
                 UINT_PTR end = base + ROUND_SIZE( imports->VirtualAddress, imports->Size );
                 if (end > sec->VirtualAddress + map_size) end = sec->VirtualAddress + map_size;
                 if (end > base)
-		  map_file_into_view( view, shared_fd, base, end - base,
+		  map_file_into_view( view, hfile, base, end - base,
 				      pos + (base - sec->VirtualAddress),
 				      VPROT_COMMITTED | VPROT_READ | VPROT_WRITECOPY,
 				      FALSE );
@@ -350,10 +350,10 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
          *       fall back to read(), so we don't need to check anything here.
          */
         end = file_start + file_size;
-        if (sec->PointerToRawData >= st.st_size ||
-            end > ((st.st_size + sector_align) & ~sector_align) ||
+        if (sec->PointerToRawData >= fsize ||
+            end > ((fsize + sector_align) & ~sector_align) ||
             end < file_start ||
-            map_file_into_view( view, fd, sec->VirtualAddress, file_size, file_start,
+            map_file_into_view( view, hfile, sec->VirtualAddress, file_size, file_start,
                                 VPROT_COMMITTED | VPROT_READ | VPROT_WRITECOPY,
                                 !dup_mapping ) != STATUS_SUCCESS)
 	  {

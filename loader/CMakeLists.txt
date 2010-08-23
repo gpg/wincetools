@@ -13,7 +13,7 @@ install(TARGETS himemce DESTINATION bin)
 add_executable(himemce-real himemce-real.cpp)
 SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FIXED:NO")
 # FIXME: For now...
-SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FILEALIGN:4096")
+#SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FILEALIGN:4096")
 install(TARGETS himemce-real DESTINATION bin)
 
 
