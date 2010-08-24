@@ -105,6 +105,7 @@ static NTSTATUS map_view( struct file_view **view_ret, void *base, size_t size, 
   int prot = get_prot_flags (vprot);
   struct file_view *view;
   void *ptr;
+  void *new_ptr;
 
   view = malloc (sizeof (struct file_view));
   if (!view)
@@ -114,6 +115,13 @@ static NTSTATUS map_view( struct file_view **view_ret, void *base, size_t size, 
   // even for smaller areas.
   ptr = VirtualAlloc(base, size, MEM_RESERVE, PAGE_NOACCESS /*prot*/);
   if (!ptr)
+    {
+      free (view);
+      return GetLastError();
+    }
+  /* We have to zero map the whole thing.  */
+  new_ptr = VirtualAlloc (ptr, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+  if (new_ptr != ptr)
     {
       free (view);
       return GetLastError();
@@ -159,9 +167,15 @@ static NTSTATUS map_file_into_view( struct file_view *view, HANDLE fhandle, size
     }
 #endif
 
+#if 0
+  /* Already done by map_view.  */
   /* Reserve the memory with an anonymous mmap */
   ptr = VirtualAlloc ((char *)view->base + start, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
   if (ptr == (void *)-1) return GetLastError();
+#else
+  ptr = (char *)view->base + start;
+#endif
+
   /* Now read in the file */
   pread( fhandle, ptr, size, offset );
   //  if (prot != (PROT_READ|PROT_WRITE)) mprotect( ptr, size, prot );  /* Set the right protection */
