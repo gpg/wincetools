@@ -3,6 +3,13 @@ cmake_minimum_required(VERSION 2.6.0)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+add_executable(himemce himemce.c compat.c
+  my_winternl.h
+  kernel32_kernel_private.h kernel32_process.c kernel32_module.c
+  ntdll_error.c ntdll_loader.c ntdll_virtual.c
+  server_protocol.h server_mapping.c)
+install(TARGETS himemce DESTINATION bin)
+
 add_executable(kmail-mobile-loader himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
