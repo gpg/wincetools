@@ -89,6 +89,8 @@ the loader (but allow a switch --himemce-log to switch it back on).
 
 * Show load errors in a diagnostic window for the user.
 
+* Handle DISCARDABLE flag?
+
 
 Optimization options
 --------------------
@@ -96,6 +98,69 @@ Optimization options
 * Physical memory pressure can be relieved by trying to use
   MapViewOfFile opportunistically (create relocated image, save to
   temporary file, map it).
+
+* Handle DISCARDABLE sections (if any).
+
+
+How it works (DLL version)
+--------------------------
+
+The preloader (himemce-pre) should be run when the device starts up,
+and must be run before any program is loaded high with himemce.  It
+preloads the DLLs that should be loaded high.
+
+Note that these DLLs are unknown to the system and can only be used by
+himemce.  This means that any program resp. DLL that depends on a high
+loaded DLL must be loaded by himemce resp. himemce-pre as well.
+Further note that himemce can not generate stub code for ARM, so ARM
+DLLs such as gpgme, gpg-error etc can not be preloaded and should be
+exempted.
+
+The himemce-pre program looks for all .dll files in its directory and
+preloads them, unless they are in the blacklist (FIXME: implement and
+document blacklist mechanism).
+
+The preloader performs the following steps:
+
+1. For all preloaded DLLs, map them to high memory without resolving
+their references.
+
+2. For all preloaded DLLs, identify sections that are writable and
+thus need to be allocated per process.  For these DLLs, reserve some
+memory in a continuous range at the bottom of the process address
+space (_HIMEMCE_MAP_LOW_BASE == 2 MB).  Also rewrite all base
+relocations that point into these sections to point to the low memory
+instead.
+
+3. For all preloaded DLLs, import their dependencies.  For DLLs
+managed by himemce-pre, this will resolve to the entry points in the
+high loaded DLLs (adjusting entry points into writable section to
+their low memory variant).  For system managed DLLs, use the normal
+LoadLibrary/GetProcAddressA mechanism.
+
+4. Map the data structures describing all this to a shared memory
+region named HIMEMCE_MAP_NAME == L"himemcemap".  This can be accessed
+by himemce.
+
+5. Sleep forever.  It is important that this process does not exit,
+because if this was the last user of HIMEMCE_MAP_NAME, the preloaded
+libraries will be deallocated.
+
+These steps must be executed for programs that run with preloaded
+DLLs (done by himemce):
+
+1. At startup, reserve the low memory sections.
+
+2. For each preloaded DLL, copy its writable sections to the process
+memory reserved in step 1.
+
+3. For each system DLL that is used by preloaded DLLs, call
+LoadLibrary to copy their writable sections into the process memory.
+
+4. For each preloaded DLL, call DllMain (their entry point).
+
+[5. TODO: Load a himemce.dll library that calls these DllMain's for
+each Thread in its DllMain.]
 
 
  Copyright 2010 g10 Code GmbH

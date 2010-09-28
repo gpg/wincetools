@@ -25,7 +25,7 @@
 #include <windows.h>
 #include <assert.h>
 
-#include "himemce.h"
+#include "wine.h"
 
 /* File view */
 typedef struct file_view

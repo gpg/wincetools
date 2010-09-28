@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 2.6.0)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(himemce himemce.c compat.c
-  my_winternl.h
+add_executable(himemce himemce.c
+  wine.h my_winternl.h compat.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
@@ -15,6 +15,19 @@ SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FIXED:NO")
 # FIXME: For now...
 #SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FILEALIGN:4096")
 install(TARGETS himemce-real DESTINATION bin)
+
+add_executable(himemce-tool himemce-tool.c
+  himemce-map.h himemce-map.c)
+install(TARGETS himemce-tool DESTINATION bin)
+
+add_executable(himemce-pre himemce-pre.c
+  himemce-map.h himemce-map.c
+  himemce-map-provider.c
+  wine.h my_winternl.h compat.c
+  kernel32_kernel_private.h kernel32_process.c kernel32_module.c
+  ntdll_error.c ntdll_loader.c ntdll_virtual.c
+  server_protocol.h server_mapping.c)
+install(TARGETS himemce-pre DESTINATION bin)
 
 
 # Copyright 2010 g10 Code GmbH

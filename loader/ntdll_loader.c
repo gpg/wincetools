@@ -26,7 +26,7 @@
 
 #include <assert.h>
 
-#include "himemce.h"
+#include "wine.h"
 
 PIMAGE_NT_HEADERS MyRtlImageNtHeader(HMODULE hModule)
 {
@@ -51,7 +51,8 @@ typedef struct _wine_modref
     struct _wine_modref **deps;
 } WINE_MODREF;
 
-#define MAX_MODREFS 4
+/* FIXME: cmp with himemce-map.h */
+#define MAX_MODREFS 64
 WINE_MODREF *modrefs[MAX_MODREFS];
 int nr_modrefs;
 
@@ -485,7 +486,7 @@ static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
   int len;
   
   assert (handle);
-  assert (*size = MAX_PATH);
+  assert (*size == MAX_PATH);
   
   if (libname[0] == L'/' || libname[0] == L'\\')
     {

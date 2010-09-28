@@ -22,7 +22,7 @@
  */
 
 
-#include "himemce.h"
+#include "wine.h"
 #include "kernel32_kernel_private.h"
 
 
@@ -81,8 +81,10 @@ void MODULE_get_binary_info (HANDLE hfile, struct binary_info *info)
                 case IMAGE_NT_OPTIONAL_HDR64_MAGIC:
 		  info->flags |= BINARY_FLAG_64BIT;
 		  break;
-                }
-            }
+                } 
+
+	      info->machine = ext_header.nt.FileHeader.Machine;
+           }
         }
     }
 }
