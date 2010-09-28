@@ -3,8 +3,11 @@ cmake_minimum_required(VERSION 2.6.0)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+add_definitions(-DUSE_LOCKS=1 -DUSE_DL_PREFIX=1 -DDEFAULT_GRANULARITY=2097152 -DDEFAULT_MMAP_THRESHOLD=2097152)
+
 add_executable(himemce himemce.c
   wine.h my_winternl.h compat.c
+  dlmalloc.h dlmalloc.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
@@ -24,6 +27,7 @@ add_executable(himemce-pre himemce-pre.c
   himemce-map.h himemce-map.c
   himemce-map-provider.c
   wine.h my_winternl.h compat.c
+  dlmalloc.h dlmalloc.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)

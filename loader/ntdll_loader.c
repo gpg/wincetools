@@ -26,6 +26,7 @@
 
 #include <assert.h>
 
+#include "dlmalloc.h"
 #include "wine.h"
 
 PIMAGE_NT_HEADERS MyRtlImageNtHeader(HMODULE hModule)
@@ -142,6 +143,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
   SIZE_T protect_size = 0;
   DWORD protect_old;
 #endif
+  int iscoredll = 0;
 
   thunk_list = get_rva( module, (DWORD)descr->FirstThunk );
   if (descr->OriginalFirstThunk)
@@ -151,8 +153,12 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 
   while (len && name[len-1] == ' ') len--;  /* remove trailing spaces */
 
+  if (! _stricmp (name, "coredll.dll"))
+    iscoredll = 1;
+
   if (len * sizeof(WCHAR) < sizeof(buffer))
     {
+
       ascii_to_unicode( buffer, name, len );
       buffer[len] = 0;
       //      status = load_dll( load_path, buffer, 0, &wmImp );
@@ -232,7 +238,28 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 
 	  //	  thunk_list->u1.Function = (ULONG_PTR)find_ordinal_export( imp_mod, exports, exp_size,
 	  //                                                                ordinal - exports->Base, load_path );
-	  thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+
+	  if (iscoredll)
+	    {
+#define COREDLL_MALLOC 1041
+#define COREDLL_CALLOC 1346
+#define COREDLL_FREE 1018
+#define COREDLL_REALLOC 1054
+
+	      if (ordinal == COREDLL_MALLOC)
+		thunk_list->u1.Function = (PWORD) dlmalloc;
+	      else if (ordinal == COREDLL_CALLOC)
+		thunk_list->u1.Function = (PWORD) dlcalloc;
+	      else if (ordinal == COREDLL_FREE)
+		thunk_list->u1.Function = (PWORD) dlfree;
+	      else if (ordinal == COREDLL_REALLOC)
+		thunk_list->u1.Function = (PWORD) dlrealloc;
+	      else
+		thunk_list->u1.Function = (PWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+	    }
+	  else
+	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+
 	  if (!thunk_list->u1.Function)
             {
 	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, IntToPtr(ordinal) );
@@ -245,11 +272,28 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
       else  /* import by name */
         {
 	  IMAGE_IMPORT_BY_NAME *pe_name;
+	  const char *symname = (const char*)pe_name->Name;
 	  pe_name = get_rva( module, (DWORD)import_list->u1.AddressOfData );
+
 	  //	  thunk_list->u1.Function = (ULONG_PTR)find_named_export( imp_mod, exports, exp_size,
 	  //								  (const char*)pe_name->Name,
 	  //								  pe_name->Hint, load_path );
-	  thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, (const char*)pe_name->Name);
+
+	  if (iscoredll)
+	    {
+	      if (! strcmp (symname, "malloc"))
+		thunk_list->u1.Function = (PWORD) dlmalloc;
+	      else if (! strcmp (symname, "calloc"))
+		thunk_list->u1.Function = (PWORD) dlcalloc;
+	      else if (! strcmp (symname, "free"))
+		thunk_list->u1.Function = (PWORD) dlfree;
+	      else if (! strcmp (symname, "realloc"))
+		thunk_list->u1.Function = (PWORD) dlrealloc;
+	      else
+		thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, symname);
+	    }
+	  else
+	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, (const char*)pe_name->Name);
 	  if (!thunk_list->u1.Function)
             {
 	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, (const char*)pe_name->Name );
