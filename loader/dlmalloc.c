@@ -1,4 +1,14 @@
+/* Use simple spinlock protection.  */
+#define USE_LOCKS 1
+/* Prefix exported symbols with "dl", ie dlmalloc etc.  */
+#define USE_DL_PREFIX 1
+/* On Windows CE, minimum allocation is 2MB if you want to use the
+   high memory area.  */
+#define DEFAULT_GRANULARITY (2 * 1024 * 1024)
+#define DEFAULT_MMAP_THRESHOLD (2* 1024 * 1024)
+/* Maybe replace this with something more appropriate.  */
 #define ABORT exit(1)
+
 /*
   This is a version (aka dlmalloc) of malloc/free/realloc written by
   Doug Lea and released to the public domain, as explained at
@@ -1502,21 +1512,27 @@ static int dev_zero_fd = -1; /* Cached file descriptor for /dev/zero. */
 
 /* Win32 MMAP via VirtualAlloc */
 static FORCEINLINE void* win32mmap(size_t size) {
+#if 0
+  void* ptr = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+  return (ptr != 0)? ptr: MFAIL;
+#else
   void* ptr = VirtualAlloc(0, size, MEM_RESERVE, PAGE_NOACCESS);
   if (ptr == 0)
     return MFAIL;
   VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
   return ptr;
+#endif
 }
 
 /* For direct MMAP, use MEM_TOP_DOWN to minimize interference */
 static FORCEINLINE void* win32direct_mmap(size_t size) {
+#if 0
   void* ptr = VirtualAlloc(0, size, MEM_RESERVE, PAGE_NOACCESS);
   if (ptr == 0)
     return MFAIL;
   VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE);
   return ptr;
-#if 0
+#else
   void* ptr = VirtualAlloc(0, size, MEM_RESERVE|MEM_COMMIT|MEM_TOP_DOWN,
                            PAGE_READWRITE);
   return (ptr != 0)? ptr: MFAIL;

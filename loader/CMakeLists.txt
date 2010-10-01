@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 2.6.0)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_definitions(-DUSE_LOCKS=1 -DUSE_DL_PREFIX=1 -DDEFAULT_GRANULARITY=2097152 -DDEFAULT_MMAP_THRESHOLD=2097152)
+# For dlmalloc.h
+add_definitions(-DUSE_DL_PREFIX=1)
 
 add_executable(himemce himemce.c
   wine.h my_winternl.h compat.c
@@ -12,6 +13,11 @@ add_executable(himemce himemce.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
 install(TARGETS himemce DESTINATION bin)
+
+add_library(newtest SHARED newtest.cpp newtest.def)
+add_executable(newtestex newtestex.cpp)
+target_link_libraries(newtestex newtest)
+install(TARGETS newtest newtestex DESTINATION bin)
 
 add_executable(himemce-real himemce-real.cpp)
 SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FIXED:NO")

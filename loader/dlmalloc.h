@@ -1,3 +1,7 @@
+#ifndef USE_DL_PREFIX
+#define USE_DL_PREFIX 1
+#endif
+
 /*
   Default header file for malloc-2.8.x, written by Doug Lea
   and released to the public domain, as explained at
