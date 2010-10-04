@@ -8,7 +8,7 @@ add_definitions(-DUSE_DL_PREFIX=1)
 
 add_executable(himemce himemce.c
   wine.h my_winternl.h compat.c
-  dlmalloc.h dlmalloc.c
+#  dlmalloc.h dlmalloc.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)

@@ -26,7 +26,11 @@
 
 #include <assert.h>
 
+#undef USE_DLMALLOC
+#ifdef USE_DLMALLOC
 #include "dlmalloc.h"
+#endif
+
 #include "wine.h"
 
 PIMAGE_NT_HEADERS MyRtlImageNtHeader(HMODULE hModule)
@@ -143,7 +147,9 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
   SIZE_T protect_size = 0;
   DWORD protect_old;
 #endif
+#ifdef USE_DLMALLOC
   int iscoredll = 0;
+#endif
 
   thunk_list = get_rva( module, (DWORD)descr->FirstThunk );
   if (descr->OriginalFirstThunk)
@@ -153,8 +159,10 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 
   while (len && name[len-1] == ' ') len--;  /* remove trailing spaces */
 
+#ifdef USE_DLMALLOC
   if (! _stricmp (name, "coredll.dll"))
     iscoredll = 1;
+#endif
 
   if (len * sizeof(WCHAR) < sizeof(buffer))
     {
@@ -239,6 +247,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  //	  thunk_list->u1.Function = (ULONG_PTR)find_ordinal_export( imp_mod, exports, exp_size,
 	  //                                                                ordinal - exports->Base, load_path );
 
+#ifdef USE_DLMALLOC
 	  if (iscoredll)
 	    {
 #define COREDLL_MALLOC 1041
@@ -258,6 +267,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 		thunk_list->u1.Function = (PWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
 	    }
 	  else
+#endif
 	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
 
 	  if (!thunk_list->u1.Function)
@@ -279,6 +289,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  //								  (const char*)pe_name->Name,
 	  //								  pe_name->Hint, load_path );
 
+#ifdef USE_DLMALLOC
 	  if (iscoredll)
 	    {
 	      if (! strcmp (symname, "malloc"))
@@ -293,6 +304,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 		thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, symname);
 	    }
 	  else
+#endif
 	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, (const char*)pe_name->Name);
 	  if (!thunk_list->u1.Function)
             {
