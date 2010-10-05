@@ -56,25 +56,25 @@ himemce_map_init ()
   void *ptr;
   /* Only try once.  */
   if (himemce_map_initialized)
-	  return;
+    return;
   himemce_map_initialized = 1;
   himemce_map = himemce_map_open ();
   if (! himemce_map)
     {
-		TRACE ("can not open himemce map\n");
-        return;
+      TRACE ("can not open himemce map\n");
+      return;
     }
   TRACE ("himemce map found at %p (reserving 0x%x bytes at %p)\n", himemce_map,
-	  himemce_map->low_start, himemce_map->low_size);
+	 himemce_map->low_start, himemce_map->low_size);
   ptr = VirtualAlloc(himemce_map->low_start, himemce_map->low_size,
-	    MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+		     MEM_RESERVE, PAGE_EXECUTE_READWRITE);
   if (! ptr)
-  {
-	  TRACE ("failed to reserve memory: %i\n", GetLastError ());
-	  himemce_map_close (himemce_map);
-	  himemce_map = NULL;
+    {
+      TRACE ("failed to reserve memory: %i\n", GetLastError ());
+      himemce_map_close (himemce_map);
+      himemce_map = NULL;
       return;
-  }
+    }
 }
 
 
@@ -82,7 +82,7 @@ himemce_map_init ()
 # define page_shift 12
 # define page_size  0x1000
 
-#define ROUND_SIZE(size) \
+#define ROUND_SIZE(size)			\
   (((SIZE_T)(size) + page_mask) & ~page_mask)
 
 static SIZE_T
@@ -90,13 +90,14 @@ section_size (IMAGE_SECTION_HEADER *sec)
 {
   static const SIZE_T sector_align = 0x1ff;
   SIZE_T map_size, file_size, end;
-
+  
   if (!sec->Misc.VirtualSize)
     map_size = ROUND_SIZE( sec->SizeOfRawData );
   else
     map_size = ROUND_SIZE( sec->Misc.VirtualSize );
-
-  file_size = (sec->SizeOfRawData + (sec->PointerToRawData & sector_align) + sector_align) & ~sector_align;
+  
+  file_size = (sec->SizeOfRawData + (sec->PointerToRawData & sector_align)
+	       + sector_align) & ~sector_align;
   if (file_size > map_size) file_size = map_size;
   end = ROUND_SIZE( file_size );
   if (end > map_size) end = map_size;
@@ -119,18 +120,18 @@ himemce_map_load_dll (const char *name)
   int idx;
   const IMAGE_IMPORT_DESCRIPTOR *imports;
   DWORD imports_size;
-
+  
   himemce_map_init ();
   if (! himemce_map)
-	  return NULL;
-
+    return NULL;
+  
   mod = himemce_map_find_module (himemce_map, name);
   if (!mod)
-	  return NULL;
+    return NULL;
   modidx = mod - himemce_map->module;
   if (himemce_mod_loaded[modidx])
-	  return mod->base;
-
+    return mod->base;
+  
   /* First map the sections low.  */
   ptr = mod->base;
   dos = (IMAGE_DOS_HEADER *) ptr;
@@ -139,54 +140,54 @@ himemce_map_load_dll (const char *name)
                                   + nt->FileHeader.SizeOfOptionalHeader);
   sec_cnt = nt->FileHeader.NumberOfSections;
   for (idx = 0; idx < sec_cnt; idx++)
-  {
-	size_t secsize;
-	char *secptr;
-
-	if (! sec[idx].PointerToLinenumbers)
-	  continue;
-	secsize = section_size (&sec[idx]);
-    secptr = VirtualAlloc ((void *) sec[idx].PointerToLinenumbers,
-		secsize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-	if (! secptr)
+    {
+      size_t secsize;
+      char *secptr;
+      
+      if (! sec[idx].PointerToLinenumbers)
+	continue;
+      secsize = section_size (&sec[idx]);
+      secptr = VirtualAlloc ((void *) sec[idx].PointerToLinenumbers,
+			     secsize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+      if (! secptr)
 	{
-		TRACE ("could not allocate 0x%x bytes of low memory at %p: %i\n",
-			secsize, sec[idx].PointerToLinenumbers, GetLastError ());
-		return (void *) -1;
+	  TRACE ("could not allocate 0x%x bytes of low memory at %p: %i\n",
+		 secsize, sec[idx].PointerToLinenumbers, GetLastError ());
+	  return (void *) -1;
 	}
-    memcpy (secptr, ptr + sec[idx].VirtualAddress, secsize);
-  }
-
+      memcpy (secptr, ptr + sec[idx].VirtualAddress, secsize);
+    }
+  
   /* To break circles, we claim that we loaded before recursing.  */
   himemce_mod_loaded[modidx]++;
   imports = MyRtlImageDirectoryEntryToData ((HMODULE) ptr, TRUE,
                                             IMAGE_DIRECTORY_ENTRY_IMPORT,
                                             &imports_size);
   if (imports)
-  {
-	idx = 0;
-	while (imports[idx].Name && imports[idx].FirstThunk)
+    {
+      idx = 0;
+      while (imports[idx].Name && imports[idx].FirstThunk)
 	{
-		char *iname = ptr + imports[idx].Name;
-		void *ibase;
-
-		/* Recursion!  */
-		ibase = himemce_map_load_dll (iname);
-		if (ibase == (void *) -1)
-			return (void *) -1;
-		/* Nothing to do if ibase !=0: Successful loading of high DLL.  */
-		if (ibase == 0)
+	  char *iname = ptr + imports[idx].Name;
+	  void *ibase;
+	  
+	  /* Recursion!  */
+	  ibase = himemce_map_load_dll (iname);
+	  if (ibase == (void *) -1)
+	    return (void *) -1;
+	  /* Nothing to do if ibase !=0: Successful loading of high DLL.  */
+	  if (ibase == 0)
+	    {
+	      ibase = LoadLibrary (iname);
+	      if (!ibase)
 		{
-			ibase = LoadLibrary (iname);
-			if (!ibase)
-			{
-				TRACE ("Could not find %s, dependency of %s\n", iname, name);
-				return (void *) -1;
-			}
+		  TRACE ("Could not find %s, dependency of %s\n", iname, name);
+		  return (void *) -1;
 		}
-		idx++;
+	    }
+	  idx++;
 	}
-  }
+    }
   return ptr;
 }
 
@@ -199,9 +200,9 @@ get_rva_low (char *module, size_t rva)
   IMAGE_SECTION_HEADER *sec;
   int sec_cnt;
   int idx;
-
-  sec = (IMAGE_SECTION_HEADER*)((char*)&nt->OptionalHeader+nt->FileHeader.SizeO\
-fOptionalHeader);
+  
+  sec = (IMAGE_SECTION_HEADER*)((char*)&nt->OptionalHeader
+				+ nt->FileHeader.SizeOfalHeader);
   sec_cnt = nt->FileHeader.NumberOfSections;
 
   for (idx = 0; idx < sec_cnt; idx++)
@@ -210,11 +211,11 @@ fOptionalHeader);
         continue;
       if (rva >= sec[idx].VirtualAddress
           && rva < sec[idx].VirtualAddress + section_size (&sec[idx]))
-                break;
+	break;
     }
   if (idx == sec_cnt)
     return (void *)((char *)module + rva);
-
+  
   return (void *)((char *)sec[idx].PointerToLinenumbers
                   + (rva - sec[idx].VirtualAddress));
 }
@@ -226,14 +227,14 @@ find_ordinal_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
 {
   FARPROC proc;
   const DWORD *functions = get_rva (module, exports->AddressOfFunctions);
-
+  
   if (ordinal >= exports->NumberOfFunctions)
     {
       TRACE(" ordinal %d out of range!\n", ordinal + exports->Base );
       return NULL;
     }
   if (!functions[ordinal]) return NULL;
-
+  
 #if 0
   /* if the address falls into the export dir, it's a forward */
   if (((const char *)proc >= (const char *)exports) &&
@@ -247,27 +248,30 @@ find_ordinal_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
 
 static FARPROC
 find_named_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
-                   DWORD exp_size, const char *name, int hint, LPCWSTR load_path)
+                   DWORD exp_size, const char *name, int hint,
+		   LPCWSTR load_path)
 {
   const WORD *ordinals = get_rva (module, exports->AddressOfNameOrdinals);
   const DWORD *names = get_rva (module, exports->AddressOfNames);
   int min = 0, max = exports->NumberOfNames - 1;
-
+  
   /* first check the hint */
   if (hint >= 0 && hint <= max)
     {
       char *ename = get_rva( module, names[hint] );
       if (!strcmp( ename, name ))
-        return find_ordinal_export( module, exports, exp_size, ordinals[hint], load_path);
+        return find_ordinal_export( module, exports, exp_size,
+				    ordinals[hint], load_path);
     }
-
+  
   /* then do a binary search */
   while (min <= max)
     {
       int res, pos = (min + max) / 2;
       char *ename = get_rva( module, names[pos] );
       if (!(res = strcmp( ename, name )))
-        return find_ordinal_export( module, exports, exp_size, ordinals[pos], load_path);
+        return find_ordinal_export( module, exports, exp_size,
+				    ordinals[pos], load_path);
       if (res > 0) max = pos - 1;
       else min = pos + 1;
     }
@@ -279,16 +283,16 @@ find_named_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
 
 PIMAGE_NT_HEADERS MyRtlImageNtHeader(HMODULE hModule)
 {
-    IMAGE_NT_HEADERS *ret;
-    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)hModule;
-
-    ret = NULL;
-    if (dos->e_magic == IMAGE_DOS_SIGNATURE)
+  IMAGE_NT_HEADERS *ret;
+  IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)hModule;
+  
+  ret = NULL;
+  if (dos->e_magic == IMAGE_DOS_SIGNATURE)
     {
-        ret = (IMAGE_NT_HEADERS *)((char *)dos + dos->e_lfanew);
-        if (ret->Signature != IMAGE_NT_SIGNATURE) ret = NULL;
+      ret = (IMAGE_NT_HEADERS *)((char *)dos + dos->e_lfanew);
+      if (ret->Signature != IMAGE_NT_SIGNATURE) ret = NULL;
     }
-    return ret;
+  return ret;
 }
 
 
