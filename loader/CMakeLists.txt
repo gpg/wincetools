@@ -14,14 +14,15 @@ add_executable(himemce himemce.c
   server_protocol.h server_mapping.c)
 install(TARGETS himemce DESTINATION bin)
 
-add_library(newtest SHARED newtest.cpp newtest.def)
-add_executable(newtestex newtestex.cpp)
-target_link_libraries(newtestex newtest)
-install(TARGETS newtest newtestex DESTINATION bin)
+#Example rules how to build a library.
+#add_library(newtest SHARED newtest.cpp newtest.def)
+#add_executable(newtestex newtestex.cpp)
+#target_link_libraries(newtestex newtest)
+#install(TARGETS newtest newtestex DESTINATION bin)
 
 add_executable(himemce-real himemce-real.cpp)
 SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FIXED:NO")
-# FIXME: For now...
+# Not necessary anymore.
 #SET_TARGET_PROPERTIES(himemce-real PROPERTIES LINK_FLAGS " /FILEALIGN:4096")
 install(TARGETS himemce-real DESTINATION bin)
 
@@ -33,7 +34,7 @@ add_executable(himemce-pre himemce-pre.c
   himemce-map.h himemce-map.c
   himemce-map-provider.c
   wine.h my_winternl.h compat.c
-  dlmalloc.h dlmalloc.c
+#  dlmalloc.h dlmalloc.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
