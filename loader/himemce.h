@@ -37,4 +37,8 @@ extern int verbose;
 #include "wine.h"
 
 
+/* libhimemce.c */
+void himemce_set_dllmain_cb (void (*cb) (DWORD, LPVOID));
+
+
 #endif /* HIMEMCE_H */

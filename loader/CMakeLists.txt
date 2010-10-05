@@ -6,13 +6,18 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 # For dlmalloc.h
 add_definitions(-DUSE_DL_PREFIX=1)
 
+add_library(libhimemce SHARED libhimemce.c libhimemce.def)
+install(TARGETS libhimemce DESTINATION bin)
+
 add_executable(himemce himemce.c
   wine.h my_winternl.h compat.c
 #  dlmalloc.h dlmalloc.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
+target_link_libraries(himemce libhimemce)
 install(TARGETS himemce DESTINATION bin)
+
 
 #Example rules how to build a library.
 #add_library(newtest SHARED newtest.cpp newtest.def)
@@ -38,6 +43,7 @@ add_executable(himemce-pre himemce-pre.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c)
+target_link_libraries(himemce-pre libhimemce)
 install(TARGETS himemce-pre DESTINATION bin)
 
 

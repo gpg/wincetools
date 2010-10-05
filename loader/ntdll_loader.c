@@ -50,6 +50,33 @@ static int himemce_map_initialized;
 static struct himemce_map *himemce_map;
 int himemce_mod_loaded[HIMEMCE_MAP_MAX_MODULES];
 
+void
+himemce_invoke_dll_mains (DWORD reason, LPVOID reserved)
+{
+  int i;
+
+  if (! himemce_map)
+    return NULL;
+
+  for (i = 0; i < himemce_map->nr_modules; i++)
+    if (himemce_mod_loaded[modidx])
+      {
+	char *ptr = himemce_map->module[i].base;
+	IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)ptr;
+	IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(ptr + dos->e_lfanew);
+	BOOL WINAPI (*dllmain) (HINSTANCE, DWORD, LPVOID);
+	BOOL res;
+
+	dllmain = nt->OptionalHeader.AddressOfEntryPoint;
+	res = (*dllmain) (ptr, reason, reserved);
+	if (reason == DLL_PROCESS_ATTACH && !res)
+	  {
+	    ERR ("attaching %s failed (ignored)", himemce_map->module[i].name);
+	  }
+      }
+}
+
+
 static void
 himemce_map_init ()
 {
@@ -75,6 +102,8 @@ himemce_map_init ()
       himemce_map = NULL;
       return;
     }
+
+  himemce_set_dllmain_cb (himemce_invoke_dll_mains);
 }
 
 
@@ -646,6 +675,11 @@ static NTSTATUS fixup_imports( WINE_MODREF *wm, LPCWSTR load_path )
     }
   current_modref = prev;
   //  if (wm->ldr.ActivationContext) RtlDeactivateActivationContext( 0, cookie );
+
+#ifdef USE_HIMEMCE_MAP
+  himemce_invoke_dll_mains (DLL_PROCESS_ATTACH, NULL);
+#endif
+
   return status;
 }
 
