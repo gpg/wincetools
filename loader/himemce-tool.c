@@ -45,7 +45,7 @@ main (int argc, char *argv[])
   for (i = 0; i < map->nr_modules; i++)
     {
       struct himemce_module *mod = &map->module[i];
-      printf ("module[%2i] = %s %p\n", mod->name, mod->base);
+      printf ("module[%2i] = %s %p\n", i, mod->name, mod->base);
       /* TODO: Loop through sections, show some more info.  */
     }
 
