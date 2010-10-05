@@ -55,12 +55,12 @@ himemce_map_close (struct himemce_map *map)
 
 /* Find the DLL with the name DLLNAME in the map.  */
 struct himemce_module *
-himemce_map_find_dll (struct himemce_map *map, char *name)
+himemce_map_find_module (struct himemce_map *map, const char *name)
 {
   int i;
 
-  for (i = 0; i < map->nr_modules; map++)
-    if (! strcmp (map->module[i].name, name))
+  for (i = 0; i < map->nr_modules; i++)
+    if (! _stricmp (map->module[i].name, name))
       break;
 
   if (i < map->nr_modules)

@@ -86,7 +86,7 @@ struct himemce_map *himemce_map_open (void);
 void himemce_map_close (struct himemce_map *map);
 
 /* Find the DLL with the name DLLNAME in the map.  */
-struct himemce_module *himemce_map_find_dll (struct himemce_map *map,
-					     char *name);
+struct himemce_module *himemce_map_find_module (struct himemce_map *map,
+					     const char *name);
 
 #endif /* HIMEMCE_MAP_H */
