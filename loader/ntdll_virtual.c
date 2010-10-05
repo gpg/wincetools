@@ -113,7 +113,7 @@ static NTSTATUS map_view( struct file_view **view_ret, void *base, size_t size, 
   
   // FIXME: Only with NOACCESS does Windows CE prefer the high mem area
   // even for smaller areas.
-  ptr = VirtualAlloc(base, size, MEM_RESERVE, PAGE_NOACCESS /*prot*/);
+  ptr = VirtualAlloc(base, size < (2* 1024*1024) ? 2*1024*1024 : size, MEM_RESERVE, PAGE_NOACCESS /*prot*/);
   if (!ptr)
     {
       free (view);
