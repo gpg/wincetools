@@ -1,4 +1,4 @@
-/* himemce.h - High Memory for Windows CE interfaces
+/* himemce-pre.h - High Memory for Windows CE
    Copyright (C) 2010 g10 Code GmbH
    Written by Marcus Brinkmann <marcus@g10code.com>
 
@@ -19,26 +19,20 @@
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
    02111-1307, USA.  */
 
-#ifndef HIMEMCE_H
-#define HIMEMCE_H
+#ifndef HIMEMCE_PRE_H
+#define HIMEMCE_PRE_H 1
 
-#include <windows.h>
-
-#include "debug.h"
+#include "himemce-map.h"
 
 
-/* Global options.  */
+struct himemce_map *map_create (void);
 
-extern int verbose;
+void *map_alloc (struct himemce_map *map, int size);
 
+struct himemce_module *map_add_module (struct himemce_map *map,
+				       wchar_t filename, void *base);
 
-/* Exports from the wine code.  */
-
-#include "wine.h"
-
-
-/* libhimemce.c */
-void himemce_set_dllmain_cb (void (*cb) (DWORD, LPVOID));
+void *map_reserve_low (struct himemce_map *map, int size);
 
 
-#endif /* HIMEMCE_H */
+#endif /* HIMEMCE_PRE_H */

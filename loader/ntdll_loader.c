@@ -26,20 +26,302 @@
 
 #include <assert.h>
 
-#include "himemce.h"
+#undef USE_DLMALLOC
+#ifdef USE_DLMALLOC
+#include "dlmalloc.h"
+#endif
+
+#include "wine.h"
+
+/* convert PE image VirtualAddress to Real Address */
+static void *get_rva( HMODULE module, DWORD va )
+{
+  return (void *)((char *)module + va);
+}
+
+
+#define USE_HIMEMCE_MAP
+#ifdef USE_HIMEMCE_MAP
+/* Support for DLL loading.  */
+
+#include "himemce-map.h"
+
+static int himemce_map_initialized;
+static struct himemce_map *himemce_map;
+int himemce_mod_loaded[HIMEMCE_MAP_MAX_MODULES];
+
+void
+himemce_invoke_dll_mains (DWORD reason, LPVOID reserved)
+{
+  int i;
+
+  if (! himemce_map)
+    return NULL;
+
+  for (i = 0; i < himemce_map->nr_modules; i++)
+    if (himemce_mod_loaded[modidx])
+      {
+	char *ptr = himemce_map->module[i].base;
+	IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)ptr;
+	IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(ptr + dos->e_lfanew);
+	BOOL WINAPI (*dllmain) (HINSTANCE, DWORD, LPVOID);
+	BOOL res;
+
+	dllmain = nt->OptionalHeader.AddressOfEntryPoint;
+	res = (*dllmain) (ptr, reason, reserved);
+	if (reason == DLL_PROCESS_ATTACH && !res)
+	  {
+	    ERR ("attaching %s failed (ignored)", himemce_map->module[i].name);
+	  }
+      }
+}
+
+
+static void
+himemce_map_init ()
+{
+  void *ptr;
+  /* Only try once.  */
+  if (himemce_map_initialized)
+    return;
+  himemce_map_initialized = 1;
+  himemce_map = himemce_map_open ();
+  if (! himemce_map)
+    {
+      TRACE ("can not open himemce map\n");
+      return;
+    }
+  TRACE ("himemce map found at %p (reserving 0x%x bytes at %p)\n", himemce_map,
+	 himemce_map->low_start, himemce_map->low_size);
+  ptr = VirtualAlloc(himemce_map->low_start, himemce_map->low_size,
+		     MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+  if (! ptr)
+    {
+      TRACE ("failed to reserve memory: %i\n", GetLastError ());
+      himemce_map_close (himemce_map);
+      himemce_map = NULL;
+      return;
+    }
+
+  himemce_set_dllmain_cb (himemce_invoke_dll_mains);
+}
+
+
+# define page_mask  0xfff
+# define page_shift 12
+# define page_size  0x1000
+
+#define ROUND_SIZE(size)			\
+  (((SIZE_T)(size) + page_mask) & ~page_mask)
+
+static SIZE_T
+section_size (IMAGE_SECTION_HEADER *sec)
+{
+  static const SIZE_T sector_align = 0x1ff;
+  SIZE_T map_size, file_size, end;
+  
+  if (!sec->Misc.VirtualSize)
+    map_size = ROUND_SIZE( sec->SizeOfRawData );
+  else
+    map_size = ROUND_SIZE( sec->Misc.VirtualSize );
+  
+  file_size = (sec->SizeOfRawData + (sec->PointerToRawData & sector_align)
+	       + sector_align) & ~sector_align;
+  if (file_size > map_size) file_size = map_size;
+  end = ROUND_SIZE( file_size );
+  if (end > map_size) end = map_size;
+  return end;
+}
+
+
+/* Returns the base of the module after loading it, if necessary.
+   NULL if not found, -1 if a fatal error occurs.  */
+void *
+himemce_map_load_dll (const char *name)
+{
+  struct himemce_module *mod;
+  int modidx;
+  char *ptr;
+  IMAGE_DOS_HEADER *dos;
+  IMAGE_NT_HEADERS *nt;
+  IMAGE_SECTION_HEADER *sec;
+  int sec_cnt;
+  int idx;
+  const IMAGE_IMPORT_DESCRIPTOR *imports;
+  DWORD imports_size;
+  
+  himemce_map_init ();
+  if (! himemce_map)
+    return NULL;
+  
+  mod = himemce_map_find_module (himemce_map, name);
+  if (!mod)
+    return NULL;
+  modidx = mod - himemce_map->module;
+  if (himemce_mod_loaded[modidx])
+    return mod->base;
+  
+  /* First map the sections low.  */
+  ptr = mod->base;
+  dos = (IMAGE_DOS_HEADER *) ptr;
+  nt = (IMAGE_NT_HEADERS *) (ptr + dos->e_lfanew);
+  sec = (IMAGE_SECTION_HEADER *) ((char*) &nt->OptionalHeader
+                                  + nt->FileHeader.SizeOfOptionalHeader);
+  sec_cnt = nt->FileHeader.NumberOfSections;
+  for (idx = 0; idx < sec_cnt; idx++)
+    {
+      size_t secsize;
+      char *secptr;
+      
+      if (! sec[idx].PointerToLinenumbers)
+	continue;
+      secsize = section_size (&sec[idx]);
+      secptr = VirtualAlloc ((void *) sec[idx].PointerToLinenumbers,
+			     secsize, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+      if (! secptr)
+	{
+	  TRACE ("could not allocate 0x%x bytes of low memory at %p: %i\n",
+		 secsize, sec[idx].PointerToLinenumbers, GetLastError ());
+	  return (void *) -1;
+	}
+      memcpy (secptr, ptr + sec[idx].VirtualAddress, secsize);
+    }
+  
+  /* To break circles, we claim that we loaded before recursing.  */
+  himemce_mod_loaded[modidx]++;
+  imports = MyRtlImageDirectoryEntryToData ((HMODULE) ptr, TRUE,
+                                            IMAGE_DIRECTORY_ENTRY_IMPORT,
+                                            &imports_size);
+  if (imports)
+    {
+      idx = 0;
+      while (imports[idx].Name && imports[idx].FirstThunk)
+	{
+	  char *iname = ptr + imports[idx].Name;
+	  void *ibase;
+	  
+	  /* Recursion!  */
+	  ibase = himemce_map_load_dll (iname);
+	  if (ibase == (void *) -1)
+	    return (void *) -1;
+	  /* Nothing to do if ibase !=0: Successful loading of high DLL.  */
+	  if (ibase == 0)
+	    {
+	      ibase = LoadLibrary (iname);
+	      if (!ibase)
+		{
+		  TRACE ("Could not find %s, dependency of %s\n", iname, name);
+		  return (void *) -1;
+		}
+	    }
+	  idx++;
+	}
+    }
+  return ptr;
+}
+
+
+static void *
+get_rva_low (char *module, size_t rva)
+{
+  IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)module;
+  IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(module + dos->e_lfanew);
+  IMAGE_SECTION_HEADER *sec;
+  int sec_cnt;
+  int idx;
+  
+  sec = (IMAGE_SECTION_HEADER*)((char*)&nt->OptionalHeader
+				+ nt->FileHeader.SizeOfalHeader);
+  sec_cnt = nt->FileHeader.NumberOfSections;
+
+  for (idx = 0; idx < sec_cnt; idx++)
+    {
+      if (! sec[idx].PointerToLinenumbers)
+        continue;
+      if (rva >= sec[idx].VirtualAddress
+          && rva < sec[idx].VirtualAddress + section_size (&sec[idx]))
+	break;
+    }
+  if (idx == sec_cnt)
+    return (void *)((char *)module + rva);
+  
+  return (void *)((char *)sec[idx].PointerToLinenumbers
+                  + (rva - sec[idx].VirtualAddress));
+}
+
+
+static FARPROC
+find_ordinal_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
+                     DWORD exp_size, DWORD ordinal, LPCWSTR load_path)
+{
+  FARPROC proc;
+  const DWORD *functions = get_rva (module, exports->AddressOfFunctions);
+  
+  if (ordinal >= exports->NumberOfFunctions)
+    {
+      TRACE(" ordinal %d out of range!\n", ordinal + exports->Base );
+      return NULL;
+    }
+  if (!functions[ordinal]) return NULL;
+  
+#if 0
+  /* if the address falls into the export dir, it's a forward */
+  if (((const char *)proc >= (const char *)exports) &&
+      ((const char *)proc < (const char *)exports + exp_size))
+    return find_forwarded_export( module, (const char *)proc, load_path );
+#endif
+
+  proc = get_rva_low (module, functions[ordinal]);
+  return proc;
+}
+
+static FARPROC
+find_named_export (void *module, const IMAGE_EXPORT_DIRECTORY *exports,
+                   DWORD exp_size, const char *name, int hint,
+		   LPCWSTR load_path)
+{
+  const WORD *ordinals = get_rva (module, exports->AddressOfNameOrdinals);
+  const DWORD *names = get_rva (module, exports->AddressOfNames);
+  int min = 0, max = exports->NumberOfNames - 1;
+  
+  /* first check the hint */
+  if (hint >= 0 && hint <= max)
+    {
+      char *ename = get_rva( module, names[hint] );
+      if (!strcmp( ename, name ))
+        return find_ordinal_export( module, exports, exp_size,
+				    ordinals[hint], load_path);
+    }
+  
+  /* then do a binary search */
+  while (min <= max)
+    {
+      int res, pos = (min + max) / 2;
+      char *ename = get_rva( module, names[pos] );
+      if (!(res = strcmp( ename, name )))
+        return find_ordinal_export( module, exports, exp_size,
+				    ordinals[pos], load_path);
+      if (res > 0) max = pos - 1;
+      else min = pos + 1;
+    }
+  return NULL;
+}
+
+#endif
+
 
 PIMAGE_NT_HEADERS MyRtlImageNtHeader(HMODULE hModule)
 {
-    IMAGE_NT_HEADERS *ret;
-    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)hModule;
-
-    ret = NULL;
-    if (dos->e_magic == IMAGE_DOS_SIGNATURE)
+  IMAGE_NT_HEADERS *ret;
+  IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)hModule;
+  
+  ret = NULL;
+  if (dos->e_magic == IMAGE_DOS_SIGNATURE)
     {
-        ret = (IMAGE_NT_HEADERS *)((char *)dos + dos->e_lfanew);
-        if (ret->Signature != IMAGE_NT_SIGNATURE) ret = NULL;
+      ret = (IMAGE_NT_HEADERS *)((char *)dos + dos->e_lfanew);
+      if (ret->Signature != IMAGE_NT_SIGNATURE) ret = NULL;
     }
-    return ret;
+  return ret;
 }
 
 
@@ -51,7 +333,8 @@ typedef struct _wine_modref
     struct _wine_modref **deps;
 } WINE_MODREF;
 
-#define MAX_MODREFS 4
+/* FIXME: cmp with himemce-map.h */
+#define MAX_MODREFS 64
 WINE_MODREF *modrefs[MAX_MODREFS];
 int nr_modrefs;
 
@@ -109,13 +392,6 @@ PVOID MyRtlImageDirectoryEntryToData( HMODULE module, BOOL image, WORD dir, ULON
 }
 
 
-/* convert PE image VirtualAddress to Real Address */
-static void *get_rva( HMODULE module, DWORD va )
-{
-  return (void *)((char *)module + va);
-}
-
-
 #define allocate_stub(x,y) (0xdeadbeef)
 
 /*************************************************************************
@@ -129,8 +405,11 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
   NTSTATUS status = STATUS_SUCCESS;
   //  WINE_MODREF *wmImp;
   HMODULE imp_mod;
-  //  const IMAGE_EXPORT_DIRECTORY *exports;
-  //  DWORD exp_size;
+#ifdef USE_HIMEMCE_MAP
+  void *imp_base = 0;
+  const IMAGE_EXPORT_DIRECTORY *exports;
+  DWORD exp_size;
+#endif
   const IMAGE_THUNK_DATA *import_list;
   IMAGE_THUNK_DATA *thunk_list;
   WCHAR buffer[32];
@@ -141,6 +420,9 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
   SIZE_T protect_size = 0;
   DWORD protect_old;
 #endif
+#ifdef USE_DLMALLOC
+  int iscoredll = 0;
+#endif
 
   thunk_list = get_rva( module, (DWORD)descr->FirstThunk );
   if (descr->OriginalFirstThunk)
@@ -150,15 +432,28 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 
   while (len && name[len-1] == ' ') len--;  /* remove trailing spaces */
 
+#ifdef USE_DLMALLOC
+  if (! _stricmp (name, "coredll.dll"))
+    iscoredll = 1;
+#endif
+
+#ifdef USE_HIMEMCE_MAP
+  imp_base = himemce_map_load_dll (name);
+  if (imp_base == (void *) -1)
+    status = GetLastError ();
+  if (imp_base)
+    goto loaded;
+#endif
+
   if (len * sizeof(WCHAR) < sizeof(buffer))
     {
       ascii_to_unicode( buffer, name, len );
       buffer[len] = 0;
       //      status = load_dll( load_path, buffer, 0, &wmImp );
       imp_mod = LoadLibrary (buffer);
-      if (imp_mod == INVALID_HANDLE_VALUE)
-	status = GetLastError ();
-    }
+	  if (imp_mod == INVALID_HANDLE_VALUE)
+	    status = GetLastError ();
+  }
   else  /* need to allocate a larger buffer */
     {
       WCHAR *ptr = malloc ((len + 1) * sizeof(WCHAR) );
@@ -166,11 +461,14 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
       ascii_to_unicode( ptr, name, len );
       ptr[len] = 0;
       // status = load_dll( load_path, ptr, 0, &wmImp );
-      imp_mod = LoadLibrary (ptr);
-      if (imp_mod == INVALID_HANDLE_VALUE)
-	status = GetLastError ();
-      free (ptr);
+	  imp_mod = LoadLibrary (ptr);
+	  if (imp_mod == INVALID_HANDLE_VALUE)
+	    status = GetLastError ();
+	  free (ptr);
     }
+#ifdef USE_HIMEMCE_MAP
+loaded:
+#endif
   if (status)
     {
       if (status == STATUS_DLL_NOT_FOUND)
@@ -181,7 +479,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	    name, current_modref->ldr.FullDllName, status);
       return NULL;
     }
-
+  
 #if 0
   /* unprotect the import address table since it can be located in
    * readonly section */
@@ -192,9 +490,10 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 			  &protect_size, PAGE_WRITECOPY, &protect_old );
 #endif
 
-#if 0
-  imp_mod = wmImp->ldr.BaseAddress;
-  exports = RtlImageDirectoryEntryToData( imp_mod, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exp_size );
+#ifdef USE_HIMEMCE_MAP
+ if (imp_base)
+ {
+   exports = MyRtlImageDirectoryEntryToData( imp_base, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exp_size );
 
   if (!exports)
     {
@@ -204,16 +503,16 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  if (IMAGE_SNAP_BY_ORDINAL(import_list->u1.Ordinal))
             {
 	      int ordinal = IMAGE_ORDINAL(import_list->u1.Ordinal);
-	      WARN("No implementation for %s.%d", name, ordinal );
-	      thunk_list->u1.Function = allocate_stub( name, IntToPtr(ordinal) );
+	      TRACE("No implementation for %s.%d", name, ordinal );
+	      thunk_list->u1.Function = (PDWORD)(ULONG_PTR)allocate_stub( name, IntToPtr(ordinal) );
             }
 	  else
             {
 	      IMAGE_IMPORT_BY_NAME *pe_name = get_rva( module, (DWORD)import_list->u1.AddressOfData );
-	      WARN("No implementation for %s.%s", name, pe_name->Name );
-	      thunk_list->u1.Function = allocate_stub( name, (const char*)pe_name->Name );
+	      TRACE("No implementation for %s.%s", name, pe_name->Name );
+	      thunk_list->u1.Function = (PDWORD)(ULONG_PTR)allocate_stub( name, (const char*)pe_name->Name );
             }
-	  WARN(" imported from %s, allocating stub %p\n",
+	  TRACE(" imported from %s, allocating stub %p\n",
 	       current_modref->ldr.FullDllName,
 	       (void *)thunk_list->u1.Function );
 	  import_list++;
@@ -221,6 +520,7 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
         }
       goto done;
     }
+ }
 #endif
 
   while (import_list->u1.Ordinal)
@@ -229,9 +529,36 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
         {
 	  int ordinal = IMAGE_ORDINAL(import_list->u1.Ordinal);
 
-	  //	  thunk_list->u1.Function = (ULONG_PTR)find_ordinal_export( imp_mod, exports, exp_size,
-	  //                                                                ordinal - exports->Base, load_path );
-	  thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+#ifdef USE_HIMEMCE_MAP
+	  if (imp_base)
+		thunk_list->u1.Function = (PDWORD)(ULONG_PTR)find_ordinal_export( imp_base, exports, exp_size,
+	                                                              ordinal - exports->Base, load_path );
+	  else
+#endif
+
+#ifdef USE_DLMALLOC
+	  if (iscoredll)
+	    {
+#define COREDLL_MALLOC 1041
+#define COREDLL_CALLOC 1346
+#define COREDLL_FREE 1018
+#define COREDLL_REALLOC 1054
+
+	      if (ordinal == COREDLL_MALLOC)
+		thunk_list->u1.Function = (PWORD) dlmalloc;
+	      else if (ordinal == COREDLL_CALLOC)
+		thunk_list->u1.Function = (PWORD) dlcalloc;
+	      else if (ordinal == COREDLL_FREE)
+		thunk_list->u1.Function = (PWORD) dlfree;
+	      else if (ordinal == COREDLL_REALLOC)
+		thunk_list->u1.Function = (PWORD) dlrealloc;
+	      else
+		thunk_list->u1.Function = (PWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+	    }
+	  else
+#endif
+	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddress (imp_mod, (void *) (ordinal & 0xffff));
+
 	  if (!thunk_list->u1.Function)
             {
 	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, IntToPtr(ordinal) );
@@ -244,25 +571,48 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
       else  /* import by name */
         {
 	  IMAGE_IMPORT_BY_NAME *pe_name;
+	  const char *symname;
 	  pe_name = get_rva( module, (DWORD)import_list->u1.AddressOfData );
-	  //	  thunk_list->u1.Function = (ULONG_PTR)find_named_export( imp_mod, exports, exp_size,
-	  //								  (const char*)pe_name->Name,
-	  //								  pe_name->Hint, load_path );
-	  thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, (const char*)pe_name->Name);
+	  symname = (const char*)pe_name->Name;
+
+#ifdef USE_HIMEMCE_MAP
+	  if (imp_base)
+		  thunk_list->u1.Function = (PDWORD)(ULONG_PTR)find_named_export( imp_base, exports, exp_size,
+	  								  (const char*)pe_name->Name,
+	  								  pe_name->Hint, load_path );
+	  else
+#endif
+#ifdef USE_DLMALLOC
+	  if (iscoredll)
+	    {
+	      if (! strcmp (symname, "malloc"))
+		thunk_list->u1.Function = (PWORD) dlmalloc;
+	      else if (! strcmp (symname, "calloc"))
+		thunk_list->u1.Function = (PWORD) dlcalloc;
+	      else if (! strcmp (symname, "free"))
+		thunk_list->u1.Function = (PWORD) dlfree;
+	      else if (! strcmp (symname, "realloc"))
+		thunk_list->u1.Function = (PWORD) dlrealloc;
+	      else
+		thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, symname);
+	    }
+	  else
+#endif
+	    thunk_list->u1.Function = (PDWORD)(ULONG_PTR)GetProcAddressA (imp_mod, symname);
 	  if (!thunk_list->u1.Function)
             {
-	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, (const char*)pe_name->Name );
+	      thunk_list->u1.Function = (PDWORD) allocate_stub (name, symname);
 	      TRACE("No implementation for %s.%s imported from %s, setting to %p\n",
-		    name, pe_name->Name, current_modref->ldr.FullDllName,
+		    name, symname, current_modref->ldr.FullDllName,
 		    (void *)thunk_list->u1.Function );
             }
 	  TRACE("--- %s %s.%d = %p\n",
-		pe_name->Name, name, pe_name->Hint, (void *)thunk_list->u1.Function);
+		symname, name, pe_name->Hint, (void *)thunk_list->u1.Function);
         }
       import_list++;
       thunk_list++;
     }
-  // done:
+done:
 #if 0
   /* restore old protection of the import address table */
   NtProtectVirtualMemory( NtCurrentProcess(), &protect_base, &protect_size, protect_old, NULL );
@@ -325,6 +675,11 @@ static NTSTATUS fixup_imports( WINE_MODREF *wm, LPCWSTR load_path )
     }
   current_modref = prev;
   //  if (wm->ldr.ActivationContext) RtlDeactivateActivationContext( 0, cookie );
+
+#ifdef USE_HIMEMCE_MAP
+  himemce_invoke_dll_mains (DLL_PROCESS_ATTACH, NULL);
+#endif
+
   return status;
 }
 
@@ -485,7 +840,7 @@ static NTSTATUS find_dll_file( const WCHAR *load_path, const WCHAR *libname,
   int len;
   
   assert (handle);
-  assert (*size = MAX_PATH);
+  assert (*size == MAX_PATH);
   
   if (libname[0] == L'/' || libname[0] == L'\\')
     {

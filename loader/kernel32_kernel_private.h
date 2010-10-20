@@ -44,6 +44,7 @@ struct binary_info
     DWORD            flags;
     void            *res_start;
     void            *res_end;
+    WORD             machine;
 };
 
 /* module.c */

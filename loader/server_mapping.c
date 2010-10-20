@@ -21,7 +21,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include "himemce.h"
+#include "wine.h"
 #include <assert.h>
 
 /* These are always the same.  */
@@ -141,7 +141,7 @@ void *create_mapping(/* struct directory *root */ void *root,
   mapping->obj         = NULL;
   mapping->header_size = 0;
   mapping->base        = 0;
-  mapping->fhnd         = handle;
+  mapping->fhnd        = handle;
   mapping->hnd         = 0;
 
   if (protect & VPROT_READ) access |= FILE_READ_DATA;
@@ -249,7 +249,7 @@ NTSTATUS SERVER_get_mapping_info (HANDLE _mapping, ACCESS_MASK access, unsigned 
   *size        = mapping->size;
   *protect     = mapping->protect;
   *fhandle     = mapping->fhnd;
-  *handle     = mapping->hnd;
+  *handle      = mapping->hnd;
   *header_size = mapping->header_size;
   *base        = mapping->base;
 

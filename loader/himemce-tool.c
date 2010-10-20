@@ -1,4 +1,4 @@
-/* himemce.h - High Memory for Windows CE interfaces
+/* himemce-tool.c - High Memory for Windows CE
    Copyright (C) 2010 g10 Code GmbH
    Written by Marcus Brinkmann <marcus@g10code.com>
 
@@ -19,26 +19,36 @@
    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
    02111-1307, USA.  */
 
-#ifndef HIMEMCE_H
-#define HIMEMCE_H
-
 #include <windows.h>
+#include <stdio.h>
 
-#include "debug.h"
+#include "himemce-map.h"
 
+int
+main (int argc, char *argv[])
+{
+  struct himemce_map *map;
+  int i;
 
-/* Global options.  */
+  /* Open the map data (which must exist).  */
+  map = himemce_map_open ();
+  if (! map)
+    {
+      fprintf (stderr, "could not open himem map: %i\n", GetLastError ());
+      exit (1);
+    }
 
-extern int verbose;
+  printf ("Found map at %p (size 0x%x)\n", map, map->size);
+  printf ("Low memory reserve at %p (size 0x%x)\n",
+	  map->low_start, map->low_size);
+  printf ("Listing %i modules:\n", map->nr_modules);
+  for (i = 0; i < map->nr_modules; i++)
+    {
+      struct himemce_module *mod = &map->module[i];
+      printf ("module[%2i] = %s %p\n", i, mod->name, mod->base);
+      /* TODO: Loop through sections, show some more info.  */
+    }
 
-
-/* Exports from the wine code.  */
-
-#include "wine.h"
-
-
-/* libhimemce.c */
-void himemce_set_dllmain_cb (void (*cb) (DWORD, LPVOID));
-
-
-#endif /* HIMEMCE_H */
+  himemce_map_close (map);
+  return 0;
+}
