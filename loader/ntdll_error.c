@@ -22,7 +22,7 @@
  */
 
 
-#include "wine.h"
+#include "himemce.h"
 
 
 struct error_table

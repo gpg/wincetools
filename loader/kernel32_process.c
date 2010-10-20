@@ -22,7 +22,7 @@
  */
 
 #include <windef.h>
-#include "wine.h"
+#include "himemce.h"
 #include "kernel32_kernel_private.h"
 
 

@@ -1,3 +1,0 @@
-LIBRARY "libhimemce.dll"
-EXPORTS
-	himemce_set_dllmain_cb
