@@ -34,7 +34,11 @@ extern int verbose;
 
 
 /* Debugging output.  FIXME: For now... */
+#if 0
 #define TRACE printf
+#else
+#define TRACE(msg, ...)
+#endif
 
 #define ERR printf
 

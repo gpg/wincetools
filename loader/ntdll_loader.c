@@ -116,6 +116,59 @@ static void *get_rva( HMODULE module, DWORD va )
 }
 
 
+/* Return a malloced wide char string from an UTF-8 encoded input
+   string STRING.  Caller must free this value.  Returns NULL on
+   failure.  Calling this function with STRING set to NULL is not
+   defined.  */
+wchar_t *
+utf8_to_wchar (const char *str)
+{
+  int n;
+  size_t nbytes;
+  wchar_t *result;
+
+  n = MultiByteToWideChar (CP_UTF8, 0, str, -1, NULL, 0);
+  if (n < 0)
+    return NULL;
+
+  nbytes = (size_t)(n+1) * sizeof(*result);
+  if (nbytes / sizeof(*result) != (n+1)) 
+    return NULL;
+  result = malloc (nbytes);
+  if (!result)
+    return NULL;
+
+  n = MultiByteToWideChar (CP_UTF8, 0, str, -1, result, n);
+  if (n < 0)
+    {
+      free (result);
+      result = NULL;
+    }
+  return result;
+}
+
+
+static void
+fatal_err (char *fmt, ...)
+{
+  char buf[256];
+  int len;
+  va_list ap;
+  wchar_t *msg;
+
+  va_start (ap, fmt);
+  _vsnprintf (buf, sizeof (buf), fmt, ap);
+  va_end (ap);
+  buf[sizeof(buf) - 1] = '\0';
+
+  msg = utf8_to_wchar (buf);
+  if (msg)
+    MessageBox (NULL, msg, NULL, MB_OK | MB_ICONEXCLAMATION | MB_APPLMODAL);
+    
+  TerminateProcess (GetCurrentProcess(), 8);
+}
+
+
 #define allocate_stub(x,y) (0xdeadbeef)
 
 /*************************************************************************
@@ -204,16 +257,16 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  if (IMAGE_SNAP_BY_ORDINAL(import_list->u1.Ordinal))
             {
 	      int ordinal = IMAGE_ORDINAL(import_list->u1.Ordinal);
-	      WARN("No implementation for %s.%d", name, ordinal );
+	      ERR("No implementation for %s.%d", name, ordinal );
 	      thunk_list->u1.Function = allocate_stub( name, IntToPtr(ordinal) );
             }
 	  else
             {
 	      IMAGE_IMPORT_BY_NAME *pe_name = get_rva( module, (DWORD)import_list->u1.AddressOfData );
-	      WARN("No implementation for %s.%s", name, pe_name->Name );
+	      ERR("No implementation for %s.%s", name, pe_name->Name );
 	      thunk_list->u1.Function = allocate_stub( name, (const char*)pe_name->Name );
             }
-	  WARN(" imported from %s, allocating stub %p\n",
+	  ERR(" imported from %s, allocating stub %p\n",
 	       current_modref->ldr.FullDllName,
 	       (void *)thunk_list->u1.Function );
 	  import_list++;
@@ -235,9 +288,14 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  if (!thunk_list->u1.Function)
             {
 	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, IntToPtr(ordinal) );
+#if 0
 	      TRACE("No implementation for %s.%d imported from %s, setting to %p\n",
 		    name, ordinal, current_modref->ldr.FullDllName,
 		    (void *)thunk_list->u1.Function );
+#else
+	      fatal_err ("No implementation for %s.%d imported from %s\n",
+			 name, ordinal, current_modref->ldr.FullDllName);
+#endif
             }
 	  TRACE("--- Ordinal %s.%d = %p\n", name, ordinal, (void *)thunk_list->u1.Function );
         }
@@ -252,9 +310,14 @@ static WINE_MODREF *import_dll( HMODULE module, const IMAGE_IMPORT_DESCRIPTOR *d
 	  if (!thunk_list->u1.Function)
             {
 	      thunk_list->u1.Function = (PDWORD) allocate_stub( name, (const char*)pe_name->Name );
+#if 0
 	      TRACE("No implementation for %s.%s imported from %s, setting to %p\n",
 		    name, pe_name->Name, current_modref->ldr.FullDllName,
 		    (void *)thunk_list->u1.Function );
+#else
+	      fatal_err ("No implementation for %s.%s imported from %s\n",
+			 name, pe_name->Name, current_modref->ldr.FullDllName);
+#endif
             }
 	  TRACE("--- %s %s.%d = %p\n",
 		pe_name->Name, name, pe_name->Hint, (void *)thunk_list->u1.Function);

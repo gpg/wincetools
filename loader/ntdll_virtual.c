@@ -353,7 +353,7 @@ static NTSTATUS map_image (HANDLE hmapping, HANDLE hfile, HANDLE hmap, char *bas
             continue;
 	  }
 
-        ERR( "mapping section %.8s at %p off %x size %x virt %x flags %x\n",
+        TRACE( "mapping section %.8s at %p off %x size %x virt %x flags %x\n",
 	     sec->Name, ptr + sec->VirtualAddress,
 	     sec->PointerToRawData, sec->SizeOfRawData,
 	     sec->Misc.VirtualSize, sec->Characteristics );
@@ -572,7 +572,7 @@ NTSTATUS MyNtMapViewOfSection (HANDLE handle, HANDLE process, PVOID *addr_ptr, U
       size = full_size - offset.QuadPart;
       if (size != full_size - offset.QuadPart)  /* truncated */
         {
-	  WARN( "Files larger than 4Gb (%s) not supported on this platform\n",
+	  ERR( "Files larger than 4Gb (%s) not supported on this platform\n",
 		wine_dbgstr_longlong(full_size) );
 	  goto done;
         }
