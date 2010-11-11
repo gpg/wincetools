@@ -20,6 +20,7 @@
    02111-1307, USA.  */
 
 #include <windows.h>
+#include <winuser.h>
 #include <assert.h>
 
 #include "himemce.h"
@@ -64,6 +65,7 @@ main (int argc, char *argv[])
   BOOL ret;
   int result = 0;
 
+  SetCursor( LoadCursor( NULL, IDC_WAIT ) );
   app_name = get_app_name ();
   cmdline = GetCommandLine ();
 

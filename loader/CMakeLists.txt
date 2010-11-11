@@ -2,6 +2,7 @@ project(himemce)
 cmake_minimum_required(VERSION 2.6.0)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(cursor)
 
 add_executable(himemce himemce.c compat.c
   my_winternl.h
