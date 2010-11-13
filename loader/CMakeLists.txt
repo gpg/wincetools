@@ -4,47 +4,57 @@ cmake_minimum_required(VERSION 2.6.0)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(cursor)
 
-add_executable(himemce himemce.c compat.c
+add_executable(himemce WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c)
+  server_protocol.h server_mapping.c splashscreen.cpp)
+target_link_libraries(himemce aygshell)
 install(TARGETS himemce DESTINATION bin)
 
-add_executable(kmail-mobile-loader himemce.c compat.c
+add_executable(kmail-mobile-loader WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c kmail-mobile.rc)
+  server_protocol.h server_mapping.c splashscreen.cpp kmail-mobile.rc)
+target_link_libraries(kmail-mobile-loader aygshell)
 install(TARGETS kmail-mobile-loader DESTINATION bin)
 
-add_executable(notes-mobile-loader himemce.c compat.c
+add_executable(notes-mobile-loader WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c notes-mobile.rc)
+  server_protocol.h server_mapping.c splashscreen.cpp notes-mobile.rc)
+target_link_libraries(notes-mobile-loader aygshell)
 install(TARGETS notes-mobile-loader DESTINATION bin)
 
-add_executable(kaddressbook-mobile-loader himemce.c compat.c
+add_executable(kaddressbook-mobile-loader WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c kaddressbook-mobile.rc)
+  server_protocol.h server_mapping.c splashscreen.cpp kaddressbook-mobile.rc)
+target_link_libraries(kaddressbook-mobile-loader aygshell)
 install(TARGETS kaddressbook-mobile-loader DESTINATION bin)
 
-add_executable(korganizer-mobile-loader himemce.c compat.c
+add_executable(korganizer-mobile-loader WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c korganizer-mobile.rc)
+  server_protocol.h server_mapping.c splashscreen.cpp korganizer-mobile.rc)
+target_link_libraries(korganizer-mobile-loader aygshell)
 install(TARGETS korganizer-mobile-loader DESTINATION bin)
 
-add_executable(tasks-mobile-loader himemce.c compat.c
+add_executable(tasks-mobile-loader WIN32 himemce.c compat.c
   my_winternl.h
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
-  server_protocol.h server_mapping.c tasks-mobile.rc)
+  server_protocol.h server_mapping.c splashscreen.cpp tasks-mobile.rc)
+target_link_libraries(tasks-mobile-loader aygshell)
 install(TARGETS tasks-mobile-loader DESTINATION bin)
+
+add_library(splashscreen SHARED dummy.cpp splashscreen.rc)
+SET_TARGET_PROPERTIES(splashscreen PROPERTIES LINK_FLAGS /NOENTRY)
+install(TARGETS splashscreen DESTINATION bin)
 # Copyright 2010 g10 Code GmbH
 #
 # This file is free software; as a special exception the author gives
