@@ -125,7 +125,7 @@ int WINAPI WinMain(
   // If the splashscreen window is already loaded just show it
 	hwnd = FindWindow(szWindowClass, szTitle);	
   if (hwnd) {
-        SetForegroundWindow((HWND)((ULONG) hwnd | 0x00000001));
+         ::ShowWindow( hwnd, SW_SHOW );
 	} else {
 	  registerClass(hInstance);
 	  
