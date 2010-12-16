@@ -32,7 +32,7 @@ int verbose = 1;
 /* Get the filename of the image file to load.  Normally, this is the
    current exe name, with "-real.exe" instead of any existing
    ending.  */
-static wchar_t *
+wchar_t *
 get_app_name (void)
 {
   /* Nine for "-real.exe" and one for good luck.  */
@@ -55,13 +55,13 @@ get_app_name (void)
   wcscpy (end, L"-real.exe");
   return filename;
 }
-  
 
 int
 main (int argc, char *argv[])
 {
   WCHAR *app_name;
   WCHAR *cmdline;
+
   BOOL ret;
   int result = 0;
 

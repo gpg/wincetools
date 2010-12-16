@@ -93,6 +93,13 @@ HMODULE MyLoadLibraryExW (LPCWSTR libnameW, HANDLE hfile, DWORD flags);
 
 /* kernel32_process.c */
 BOOL MyCreateProcessW (LPCWSTR app_name, LPWSTR cmd_line, int *exit_code);
-
-
+#ifdef __cplusplus
+extern "C" {  // only need to export C interface if
+              // used by C++ source code
+#endif
+/* himemce.c */
+wchar_t *get_app_name (void);
+#ifdef __cplusplus
+}
+#endif
 #endif /* HIMEMCE_H */

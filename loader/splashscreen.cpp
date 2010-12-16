@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <aygshell.h>
+#include "himemce.h"
 
 // Global Bitmap variable
 HBITMAP hbm;
@@ -95,6 +96,66 @@ LRESULT CALLBACK windowProc(
   return DefWindowProc(hwnd,uMsg,wParam,lParam);
 }  
 
+/* Restore a Window of a process based on the filename
+ * of this process. With some special Case handling for
+ * Kontact-Mobile
+ * Returns false if the window can not be found */
+bool
+restore_existing_window( const wchar_t * filename )
+{
+    HWND windowID = NULL;
+    wchar_t * basename;
+    wchar_t * p;
+    wchar_t c;
+
+    if (! filename ) {
+        TRACE("check_window_exists called with NULL");
+        return false;
+    }
+    c = L'\\';
+    basename = wcsrchr(filename, c) + 1;
+    if (! basename) {
+        TRACE("Basename not found\n");
+        return false;
+    }
+    TRACE("BASENAME of %S \n is : %S \n", filename, basename);
+
+    c = L'-';
+
+    p = wcsrchr(filename, c);
+    if (! p ) {
+        TRACE("File extension -real.exe could not be found\n");
+        return false;
+    }
+    *p = L'\0';
+
+    TRACE("Searching for Window: %S \n", basename);
+    windowID = FindWindow( NULL, basename);
+    if (windowID)
+    {
+        wchar_t classname[255];
+        //Find the general top level Window and bring to front
+        SetForegroundWindow((HWND)(((ULONG)windowID) | 0x01 ));
+        // Check for subwindows that should be laid on top of that
+        if ( ! GetClassName(windowID, classname, 255) ) {
+            TRACE("No class name found for window\n");
+            return true;
+        }
+        TRACE("Classname for window is: %S", classname);
+        windowID =  FindWindow(classname, L"Neue E-Mail");
+        if (windowID) {
+            TRACE ("Subwindow Neue E-Mail found\n");
+            SetForegroundWindow((HWND)(((ULONG)windowID) | 0x01 ));
+        }
+        if (windowID = FindWindow(classname, L"New E-Mail")) {
+            TRACE ("Subwindow New E-Mail found\n");
+            SetForegroundWindow((HWND)(((ULONG)windowID) | 0x01 ));
+        }
+        return true;
+    }
+
+    return false;
+}
 
 void registerClass(
   HINSTANCE hInstance)
@@ -119,10 +180,17 @@ int WINAPI WinMain(
   LPTSTR lpszCmdLine,
   int nCmdShow)
 {
-	HWND hwnd;
-	RotateTo270Degrees();
+    HWND hwnd;
+    RotateTo270Degrees();
+    WCHAR *app_name;
 
-  // If the splashscreen window is already loaded just show it
+    app_name = get_app_name ();
+
+    if (restore_existing_window(app_name)) {
+        return 0;
+    }
+
+    // If the splashscreen window is already loaded just show it
 	hwnd = FindWindow(szWindowClass, szTitle);	
   if (hwnd) { 
     ::ShowWindow( hwnd, SW_SHOW );
