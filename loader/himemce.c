@@ -63,6 +63,7 @@ main (int argc, char *argv[])
   WCHAR *cmdline;
 
   BOOL ret;
+  int result = 0;
 
   SetCursor( LoadCursor( NULL, IDC_WAIT ) );
   app_name = get_app_name ();
@@ -73,12 +74,16 @@ main (int argc, char *argv[])
   /* Note that this does not spawn a new process, but just calls into
      the startup function of the app eventually, and returns with its
      exit code.  */
+#if USE_LOADER
+  ret = MyCreateProcessW (app_name, cmdline, &result);
+#else
   ret = CreateProcess (app_name, cmdline, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, NULL, NULL);
+#endif
   if (! ret)
     {
       ERR ("starting %S failed: %i\n", app_name, GetLastError());
       return 1;
     }
 
-  return 0;
+  return result;
 }

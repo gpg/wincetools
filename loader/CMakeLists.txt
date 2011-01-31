@@ -17,6 +17,7 @@ add_executable(kmail-mobile-loader WIN32 himemce.c compat.c
   kernel32_kernel_private.h kernel32_process.c kernel32_module.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c splashscreen.cpp kmail-mobile.rc)
+set_target_properties(kmail-mobile-loader PROPERTIES COMPILE_FLAGS -DUSE_LOADER)
 target_link_libraries(kmail-mobile-loader aygshell)
 install(TARGETS kmail-mobile-loader DESTINATION bin)
 
@@ -26,6 +27,7 @@ add_executable(notes-mobile-loader WIN32 himemce.c compat.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c splashscreen.cpp notes-mobile.rc)
 target_link_libraries(notes-mobile-loader aygshell)
+set_target_properties(notes-mobile-loader PROPERTIES COMPILE_FLAGS -DUSE_LOADER)
 install(TARGETS notes-mobile-loader DESTINATION bin)
 
 add_executable(kaddressbook-mobile-loader WIN32 himemce.c compat.c
@@ -34,6 +36,7 @@ add_executable(kaddressbook-mobile-loader WIN32 himemce.c compat.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c splashscreen.cpp kaddressbook-mobile.rc)
 target_link_libraries(kaddressbook-mobile-loader aygshell)
+set_target_properties(kaddressbook-mobile-loader PROPERTIES COMPILE_FLAGS -DUSE_LOADER)
 install(TARGETS kaddressbook-mobile-loader DESTINATION bin)
 
 add_executable(korganizer-mobile-loader WIN32 himemce.c compat.c
@@ -42,6 +45,7 @@ add_executable(korganizer-mobile-loader WIN32 himemce.c compat.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c splashscreen.cpp korganizer-mobile.rc)
 target_link_libraries(korganizer-mobile-loader aygshell)
+set_target_properties(korganizer-mobile-loader PROPERTIES COMPILE_FLAGS -DUSE_LOADER)
 install(TARGETS korganizer-mobile-loader DESTINATION bin)
 
 add_executable(tasks-mobile-loader WIN32 himemce.c compat.c
@@ -50,6 +54,7 @@ add_executable(tasks-mobile-loader WIN32 himemce.c compat.c
   ntdll_error.c ntdll_loader.c ntdll_virtual.c
   server_protocol.h server_mapping.c splashscreen.cpp tasks-mobile.rc)
 target_link_libraries(tasks-mobile-loader aygshell)
+set_target_properties(tasks-mobile-loader PROPERTIES COMPILE_FLAGS -DUSE_LOADER)
 install(TARGETS tasks-mobile-loader DESTINATION bin)
 
 add_executable(kleopatra-loader WIN32 himemce.c compat.c
