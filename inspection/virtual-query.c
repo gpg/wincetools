@@ -1,10 +1,12 @@
 #include <stdio.h>
 #include <windows.h>
 
+FILE *fp;
+
 void
 dump_mbi_header ()
 {
-  printf ("alc-base   alc-prot address    size       state    protect  type     \n");
+  fprintf (fp, "alc-base   alc-prot address    size       state    protect  type     \n");
 } 
 
 
@@ -20,7 +22,7 @@ dump_protect_flags (DWORD flags)
   DWORD px = flags & (PAGE_EXECUTE | PAGE_EXECUTE_READ
 		      | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY);
   
-  printf ("%c%c%c %c%c%c  ",
+  fprintf (fp, "%c%c%c %c%c%c  ",
 	  pr ? 'r' : '-', pc ? 'c' : (pw ? 'w' : '-'), px ? 'x' : '-',
 	  (flags & PAGE_GUARD) ? 'g' : '-',
 	  (flags & PAGE_NOCACHE) ? 'n' : '-',
@@ -37,16 +39,16 @@ dump_state (DWORD state)
   switch (state)
     {
     case MEM_COMMIT:
-      printf ("commit   ");
+      fprintf (fp, "commit   ");
       return;
     case MEM_FREE:
-      printf ("free     ");
+      fprintf (fp, "free     ");
       return;
     case MEM_RESERVE:
-      printf ("reserve  ");
+      fprintf (fp, "reserve  ");
       return;
     default:
-      printf ("unknown  ");
+      fprintf (fp, "unknown  ");
     }
 }
 
@@ -57,16 +59,16 @@ dump_type (DWORD mtype)
   switch (mtype)
     {
     case MEM_IMAGE:
-      printf ("image    ");
+      fprintf (fp, "image    ");
       return;
     case MEM_MAPPED:
-      printf ("mapped   ");
+      fprintf (fp, "mapped   ");
       return;
     case MEM_PRIVATE:
-      printf ("private  ");
+      fprintf (fp, "private  ");
       return;
     default:
-      printf ("unknown  ");
+      fprintf (fp, "unknown  ");
     }
 }
 
@@ -74,16 +76,76 @@ dump_type (DWORD mtype)
 void
 dump_mbi (PMEMORY_BASIC_INFORMATION mbi)
 {
-  printf ("0x%08x ", mbi->AllocationBase);
+  fprintf (fp, "0x%08x ", mbi->AllocationBase);
   dump_protect_flags (mbi->AllocationProtect);
-  printf ("0x%08x ", mbi->BaseAddress);
-  printf ("0x%08x ", mbi->RegionSize);
+  fprintf (fp, "0x%08x ", mbi->BaseAddress);
+  fprintf (fp, "0x%08x ", mbi->RegionSize);
   dump_state (mbi->State);
   dump_protect_flags (mbi->Protect);
   dump_type (mbi->Type);
-  printf ("\n");
+  fprintf (fp, "\n");
 }
 
+#include <tlhelp32.h>
+#include <windows.h>
+#define MAX_PROCESSES 32
+
+DWORD GetMaxProcessNameLength( PROCESSENTRY32 lppe[MAX_PROCESSES], DWORD ProcessCount )
+{
+  DWORD index ;
+  DWORD MaxLength = 0;
+  DWORD CurrentLength;
+  for( index = 0; index < ProcessCount; index++ )
+    {
+      CurrentLength = wcslen( lppe[ index ].szExeFile );
+      if( MaxLength <  CurrentLength )
+	MaxLength = CurrentLength;
+    }
+  return MaxLength;
+}
+
+#define TH32CS_SNAPNOHEAPS 0x40000000
+
+DWORD GetRunningProcesses( PROCESSENTRY32 *pProcess )
+{
+  HANDLE hSnapShot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS|TH32CS_SNAPNOHEAPS, 0);
+  DWORD index = 0;
+  if(hSnapShot == (HANDLE)-1)
+    {
+#if 1
+      fprintf (fp, "GetRunningProcesses: Failed CreateToolhelp32Snapshot Error: %d\n",
+	       GetLastError());
+#endif
+      return 0;
+    }
+
+  memset(pProcess,0,sizeof(PROCESSENTRY32));
+  index = 0;
+  pProcess->dwSize = sizeof(PROCESSENTRY32);
+  if(Process32First(hSnapShot, pProcess))
+    {
+      while(TRUE)
+	{
+	  index += 1;
+	  if( index < MAX_PROCESSES )
+	    {
+	      memcpy( pProcess + 1, pProcess, sizeof(PROCESSENTRY32));
+	      pProcess++;
+	      if(!Process32Next(hSnapShot, pProcess))
+		{
+		  break;
+		}
+	    }
+	  else
+	    {
+	      index = MAX_PROCESSES;
+	      break;
+	    }
+	}
+    }
+  CloseToolhelp32Snapshot (hSnapShot);
+  return index ;
+}
 
 int
 main (int argc, char* argv[])
@@ -93,6 +155,37 @@ main (int argc, char* argv[])
   void *addr;
   int skipping = 0;
 
+  fp = fopen ("\\Speicherkarte\\vmemory.txt", "w");
+  {
+    PROCESSENTRY32 *CurrentProcess;
+    PROCESSENTRY32 Process[ MAX_PROCESSES ];
+    DWORD ProcessCount;
+    DWORD index ;
+    DWORD MaxProcessNameLength;
+    // Get the list of running processes
+    ProcessCount = GetRunningProcesses( Process );
+    // Get the length of the longest process name so that we can format
+    // the output to be pretty
+    MaxProcessNameLength = GetMaxProcessNameLength( Process, ProcessCount );
+    // Output a header to describe each column
+    fprintf (fp, "%-*s %8s %13s %9s %9s %10s\n",
+	    MaxProcessNameLength, "Process", "PID", "Base Priority", "# Threads", "Base Addr", "Access Key");
+
+    // Output information for each running process
+    for( index = 0; index < ProcessCount; index++ )
+      {
+	CurrentProcess = &(Process[ index ] );
+	fprintf (fp, "%-*S %8X %13d %9d %9X %10X\n", 
+		 MaxProcessNameLength, CurrentProcess->szExeFile,
+		 CurrentProcess->th32ProcessID,
+		 CurrentProcess->pcPriClassBase,
+		 CurrentProcess->cntThreads,
+		 CurrentProcess->th32MemoryBase,
+		 CurrentProcess->th32AccessKey
+		 );
+      }
+  }
+  
   memset (&si, '\0', sizeof (si));
   GetSystemInfo (&si);
   dump_mbi_header ();
@@ -108,7 +201,7 @@ main (int argc, char* argv[])
       if (res == 0)
 	{
 	  if (!skipping)
-	    printf ("Skipping over %p...\n", addr);
+	    fprintf (fp, "Skipping over %p...\n", addr);
 	  skipping = 1;
 	  new_addr = addr + si.dwPageSize;
  	  if (new_addr < addr)
@@ -118,7 +211,7 @@ main (int argc, char* argv[])
         }
       if (res != sizeof (mbi))
 	{
-	  printf ("Unexpected return size: %i (expected %i)\n",
+	  fprintf (fp, "Unexpected return size: %i (expected %i)\n",
 		  res, sizeof (mbi));
 	}
       skipping = 0;
@@ -132,7 +225,8 @@ main (int argc, char* argv[])
   while (1);
 
   /* Give ssh time to flush buffers.  */
-  fflush (stdout);
+  fflush (fp);
+  fclose (fp);
   Sleep (300);
   return 0;
 }

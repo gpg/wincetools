@@ -86,24 +86,44 @@ def drawit (draw, addr, size, state, prot, prot_, type):
         drawit_ (draw, addr, next, state, prot, prot_, type)
         addr = next
 
+process = [''] * 32
+threads = [0] * 32
+mode = 0
 for line in fileinput.input():
-    if line[0] != '0':
-        continue
-    # alc-base   alc-prot address    size       state    protect  type     
-    # 0x00000000 --- ---  0x00001000 0x0000f000 free     --- ---  unknown  
-    # 0x00010000 --- ---  0x00014000 0x0000a000 reserve  --- ---  image    
-    # 0x00000000 --- ---  0x0001e000 0x017a2000 free     --- ---  unknown  
-    # 0x017c0000 --- ---  0x017c0000 0x000fe000 reserve  --- ---  private  
-    # 0x017c0000 --- ---  0x018be000 0x00002000 commit   rw- ---  private  
-    # 0x018c0000 --- ---  0x018c0000 0x00002000 commit   rw- -n-  private  
+    if mode == 0:
+        field = line.split();
+        if field[0] == "alc-base":
+            mode = 1
+            continue
+        if field[0] == "Process":
+            continue
+        # Process                               PID Base Priority # Threads Base Addr Access Key
+        # NK.EXE                            FFFF002             3         2  C2000000          1
+        # filesys.exe                       FFEEE5E             3        18   4000000          2
+        # akonadi_agent_server             6CD3C9B6             3         1   6000000          4
+        base = int(field[4], 16)
+        idx = base / (32*1024*1024) - 2;
+        if idx >= 0 and idx < 32:
+            process[idx] = field[0]
+            threads[idx] = int(field[3])
+    else:
+        if line[0] != '0':
+            continue
+        # alc-base   alc-prot address    size       state    protect  type     
+        # 0x00000000 --- ---  0x00001000 0x0000f000 free     --- ---  unknown  
+        # 0x00010000 --- ---  0x00014000 0x0000a000 reserve  --- ---  image    
+        # 0x00000000 --- ---  0x0001e000 0x017a2000 free     --- ---  unknown  
+        # 0x017c0000 --- ---  0x017c0000 0x000fe000 reserve  --- ---  private  
+        # 0x017c0000 --- ---  0x018be000 0x00002000 commit   rw- ---  private  
+        # 0x018c0000 --- ---  0x018c0000 0x00002000 commit   rw- -n-  private  
 
-    fields = line.split()
-    addr, size, state, prot, prot_, type = fields[3:]
-    addr = int(addr, 16) / 4096
-    size = int(size, 16) / 4096
+        fields = line.split()
+        addr, size, state, prot, prot_, type = fields[3:]
+        addr = int(addr, 16) / 4096
+        size = int(size, 16) / 4096
 
-    drawit (draw, addr, size, state, prot, prot_, type)
-
+        drawit (draw, addr, size, state, prot, prot_, type)
+        
 
 # Create grid.
 for col in xrange(slots):
@@ -163,6 +183,11 @@ writerow (0, "Slot  0: Active Process")
 writerow (1, "Slot  1: ROM Image")
 for i in xrange (31):
     writerow (2 + i, "Slot %2i: Process %i" % (i + 2, i))
+    if process[i] != "":
+        if threads[i] > 1:
+            writerow (2 + i, "                                     %s (%i threads)" % (process[i], threads[i]))
+        else:
+            writerow (2 + i, "                                     %s" % (process[i]))
 for i in xrange (26):
     writerow (33 + i, "Slot %2i: Shared Area" % (33 + i))
 writerow (59, "Slot 59: Driver Stacks")
