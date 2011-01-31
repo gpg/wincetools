@@ -203,7 +203,7 @@ main (int argc, char* argv[])
 	  if (!skipping)
 	    fprintf (fp, "Skipping over %p...\n", addr);
 	  skipping = 1;
-	  new_addr = addr + si.dwPageSize;
+	  new_addr = (void*)(((unsigned int)addr) + si.dwPageSize);
  	  if (new_addr < addr)
 	    break;
           addr = new_addr; 
@@ -217,7 +217,7 @@ main (int argc, char* argv[])
       skipping = 0;
       dump_mbi (&mbi);
       /* Check for overflow.  */
-      new_addr = addr + mbi.RegionSize;
+      new_addr = (void*)(((unsigned int)addr) + mbi.RegionSize);
       if (new_addr < addr)
 	break;
       addr = new_addr;
