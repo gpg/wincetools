@@ -52,6 +52,14 @@ add_executable(tasks-mobile-loader WIN32 himemce.c compat.c
 target_link_libraries(tasks-mobile-loader aygshell)
 install(TARGETS tasks-mobile-loader DESTINATION bin)
 
+add_executable(kleopatra-loader WIN32 himemce.c compat.c
+  my_winternl.h
+  kernel32_kernel_private.h kernel32_process.c kernel32_module.c
+  ntdll_error.c ntdll_loader.c ntdll_virtual.c
+  server_protocol.h server_mapping.c splashscreen.cpp kleopatra.rc)
+target_link_libraries(kleopatra-loader aygshell)
+install(TARGETS kleopatra-loader DESTINATION bin)
+
 add_library(splashscreen SHARED dummy.cpp splashscreen.rc)
 SET_TARGET_PROPERTIES(splashscreen PROPERTIES LINK_FLAGS /NOENTRY)
 install(TARGETS splashscreen DESTINATION bin)
