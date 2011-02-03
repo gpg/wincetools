@@ -24,6 +24,22 @@ BOOL RotateTo270Degrees()
    return true;
 }
 
+bool endswith(const wchar_t *source, const wchar_t *endstr) {
+    size_t sourceLen;
+    size_t endstrLen;
+    wchar_t *startEnd;
+    sourceLen = wcslen(source);
+    endstrLen = wcslen(endstr);
+    if (sourceLen < endstrLen) {
+        return false;
+    }
+    startEnd = (wchar_t *)(source + (sourceLen - endstrLen));
+    if (wcscmp(startEnd, endstr) == 0) {
+        return true;
+    }
+    return false;
+}
+
 /* Restore a Window of a process based on the filename
  * of this process. With some special Case handling for
  * Kontact-Mobile
@@ -48,7 +64,11 @@ restore_existing_window( const wchar_t * filename )
     }
     TRACE("BASENAME of %S \n is : %S \n", filename, basename);
 
-    c = L'.';
+    if (endswith(filename, L"-real.exe")) {
+        c = L'-';
+    } else {
+        c = L'.';
+    }
 
     p = wcsrchr(filename, c);
     if (! p ) {
