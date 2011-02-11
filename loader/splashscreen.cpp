@@ -64,11 +64,11 @@ restore_existing_window( const wchar_t * filename )
     }
     TRACE("BASENAME of %S \n is : %S \n", filename, basename);
 
-    if (endswith(filename, L"-real.exe")) {
-        c = L'-';
-    } else {
-        c = L'.';
-    }
+#ifdef USE_LOADER
+    c = L'-';
+#else
+    c = L'.';
+#endif
 
     p = wcsrchr(filename, c);
     if (! p ) {
